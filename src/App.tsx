@@ -189,7 +189,7 @@ export default function App() {
 
     const chatText = messages.map(msg => {
       const time = msg.timestamp.toLocaleString();
-      const role = msg.role === 'user' ? 'USER' : 'giscard AI';
+      const role = msg.role === 'user' ? 'USER' : 'Giscard AI';
       const content = msg.type === 'image' ? '[Generated Image]' :
         msg.type === 'file' ? `[Attached Files: ${msg.files?.map(f => f.name).join(', ')}]` : msg.content;
       return `[${time}] ${role}:\n${content}\n${'-'.repeat(40)}`;
@@ -326,7 +326,7 @@ export default function App() {
             model: currentModel.name,
             contents: [{ role: 'user', parts }],
             config: {
-              systemInstruction: "You are Yin Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.",
+              systemInstruction: "You are Giscard Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.",
             }
           });
 
@@ -342,7 +342,7 @@ export default function App() {
           }
         } else {
           // Mistral AI
-          const systemMsg = "You are Yin Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.";
+          const systemMsg = "You are Giscard Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.";
 
           const contentParts: any[] = [{ type: 'text', text: userInput || "Analyze the following files." }];
 
@@ -438,7 +438,7 @@ export default function App() {
               <Cpu size={28} className="animate-pulse" />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-[var(--primary-color)] to-[var(--accent-color)] bg-clip-text text-transparent">Yin Ai</h1>
+              <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-[var(--primary-color)] to-[var(--accent-color)] bg-clip-text text-transparent">Giscard Ai</h1>
               <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-widest font-semibold">Multimodal Intelligence</p>
             </div>
           </div>
@@ -617,7 +617,7 @@ export default function App() {
                     <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.2s]" />
                     <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.4s]" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary-color)]">Yin Ai is thinking...</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary-color)]">Giscard Ai is thinking...</span>
                 </div>
                 <div className="h-2 w-32 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <motion.div
