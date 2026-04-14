@@ -326,7 +326,7 @@ export default function App() {
             model: currentModel.name,
             contents: [{ role: 'user', parts }],
             config: {
-              systemInstruction: "You are Yin Ai, a powerful multimodal assistant. You can analyze documents (PDF, Docx, images), write code, generate SVGs and icons, and solve complex problems. When asked for icons or graphics, prefer generating clean SVG code that the user can copy. Be professional, fast, and helpful.",
+              systemInstruction: "You are Yin Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.",
             }
           });
 
@@ -342,7 +342,7 @@ export default function App() {
           }
         } else {
           // Mistral AI
-          const systemMsg = "You are Yin Ai, a powerful multimodal assistant. You can analyze documents (PDF, Docx, images), write code, generate SVGs and icons, and solve complex problems. When asked for icons or graphics, prefer generating clean SVG code that the user can copy. Be professional, fast, and helpful.";
+          const systemMsg = "You are Yin Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.";
 
           const contentParts: any[] = [{ type: 'text', text: userInput || "Analyze the following files." }];
 
@@ -555,23 +555,39 @@ export default function App() {
                       <button className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Download size={14} /></button>
                     </div>
                   ) : msg.type === 'file' ? (
-                    <div className="flex items-center gap-3 p-2 bg-white/10 rounded-lg">
-                      <FileText size={20} />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium truncate max-w-[200px]">{msg.fileName}</span>
-                        <span className="text-[10px] opacity-70">Document uploaded</span>
+                    <div className="flex flex-col gap-2">
+                       {msg.content && (
+                          <div className={`text-sm md:text-base whitespace-pre-wrap leading-relaxed ${msg.role === 'user' ? 'text-white' : ''}`}>
+                             {msg.content}
+                          </div>
+                       )}
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {msg.files?.map((f, i) => (
+                          <div key={i} className="flex items-center gap-2 p-2 bg-white/10 rounded-lg w-fit">
+                            <FileText size={16} />
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium truncate max-w-[150px]">{f.name}</span>
+                              <span className="text-[9px] opacity-70">Uploaded</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
+                  ) : msg.role === 'user' ? (
+                     <div className="text-sm md:text-base text-white whitespace-pre-wrap leading-relaxed">
+                        {msg.content}
+                     </div>
                   ) : (
-                    <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
-                      <ReactMarkdown
+                    <div className="prose dark:prose-invert max-w-none leading-relaxed text-sm md:text-base">
+                      <ReactMarkdown 
                         remarkPlugins={[remarkGfm]}
                         components={{
                           code({ node, inline, className, children, ...props }: any) {
-                            return !inline ? (
-                              <CodeBlock {...props}>{children}</CodeBlock>
+                            const match = /language-(\w+)/.exec(className || '');
+                            return !inline && match ? (
+                              <CodeBlock language={match[1]} {...props}>{String(children).replace(/\n$/, '')}</CodeBlock>
                             ) : (
-                              <code className="bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded text-[var(--accent-color)] font-mono" {...props}>
+                              <code className="bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded text-[var(--accent-color)] font-mono text-[13px]" {...props}>
                                 {children}
                               </code>
                             );
