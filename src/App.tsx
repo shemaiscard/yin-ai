@@ -11,15 +11,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Mistral } from '@mistralai/mistralai';
-import { 
-  Send, 
-  Bot, 
-  User, 
-  Loader2, 
-  Image as ImageIcon, 
-  Languages, 
-  Calculator, 
-  Code, 
+import {
+  Send,
+  Bot,
+  User,
+  Loader2,
+  Image as ImageIcon,
+  Languages,
+  Calculator,
+  Code,
   FileText,
   Moon,
   Sun,
@@ -65,39 +65,39 @@ const getMistralKey = () => {
 const mistral = new Mistral({ apiKey: getMistralKey() });
 
 const MODEL_CONFIG = [
-  { 
-    id: 'mistral-small-latest', 
-    type: 'mistral', 
-    name: 'Mistral Small', 
-    desc: 'Ultra-fast & Reliable', 
-    caps: 'Text, Code, Reasoning', 
+  {
+    id: 'mistral-small-latest',
+    type: 'mistral',
+    name: 'Mistral Small',
+    desc: 'Ultra-fast & Reliable',
+    caps: 'Text, Code, Reasoning',
     limit: 'Best for general chat',
     color: 'var(--primary-color)'
   },
-  { 
-    id: 'pixtral-12b-2409', 
-    type: 'mistral', 
-    name: 'Pixtral 12B', 
-    desc: 'Multimodal Expert', 
-    caps: 'Images, Text, Vision', 
+  {
+    id: 'pixtral-12b-2409',
+    type: 'mistral',
+    name: 'Pixtral 12B',
+    desc: 'Multimodal Expert',
+    caps: 'Images, Text, Vision',
     limit: 'Best for file analysis',
     color: 'var(--accent-color)'
   },
-  { 
-    id: 'gemini-2.0-flash', 
-    type: 'gemini', 
-    name: 'Gemini 2.0 Flash', 
-    desc: 'Next-Gen Intelligence', 
-    caps: 'Multimodal, High Speed', 
+  {
+    id: 'gemini-2.0-flash',
+    type: 'gemini',
+    name: 'Gemini 2.0 Flash',
+    desc: 'Next-Gen Intelligence',
+    caps: 'Multimodal, High Speed',
     limit: 'Free Tier Quota',
     color: 'var(--secondary-color)'
   },
-  { 
-    id: 'gemini-1.5-pro', 
-    type: 'gemini', 
-    name: 'Gemini 1.5 Pro', 
-    desc: 'Deep Reasoning', 
-    caps: 'Complex Logic, Large Context', 
+  {
+    id: 'gemini-1.5-pro',
+    type: 'gemini',
+    name: 'Gemini 1.5 Pro',
+    desc: 'Deep Reasoning',
+    caps: 'Complex Logic, Large Context',
     limit: 'Lower Rate Limits',
     color: 'var(--warning-color)'
   }
@@ -190,8 +190,8 @@ export default function App() {
     const chatText = messages.map(msg => {
       const time = msg.timestamp.toLocaleString();
       const role = msg.role === 'user' ? 'USER' : 'giscard AI';
-      const content = msg.type === 'image' ? '[Generated Image]' : 
-                      msg.type === 'file' ? `[Attached Files: ${msg.files?.map(f => f.name).join(', ')}]` : msg.content;
+      const content = msg.type === 'image' ? '[Generated Image]' :
+        msg.type === 'file' ? `[Attached Files: ${msg.files?.map(f => f.name).join(', ')}]` : msg.content;
       return `[${time}] ${role}:\n${content}\n${'-'.repeat(40)}`;
     }).join('\n\n');
 
@@ -224,7 +224,7 @@ export default function App() {
       try {
         let extractedText = undefined;
         if (!file.type.startsWith('image/')) {
-           extractedText = await extractTextFromFile(file);
+          extractedText = await extractTextFromFile(file);
         }
 
         const base64 = await new Promise<string>((resolve, reject) => {
@@ -241,12 +241,12 @@ export default function App() {
           extractedText
         });
       } catch (err: any) {
-         alert(`Error reading file ${file.name}: ${err.message}`);
+        alert(`Error reading file ${file.name}: ${err.message}`);
       }
 
       setFileProgress(Math.round(((i + 1) / files.length) * 100));
     }
-    
+
     setAttachedFiles(prev => [...prev, ...newFiles]);
     setFileProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -255,14 +255,14 @@ export default function App() {
   const generateResponse = async (userInput: string) => {
     if (!userInput.trim() && attachedFiles.length === 0) return;
     setIsLoading(true);
-    
+
     // Simulate "Upload to AI" progress
     setIsUploadingToAI(true);
     await new Promise(resolve => setTimeout(resolve, 800)); // Brief simulated wait or processing time
     setIsUploadingToAI(false);
 
     const currentFiles = [...attachedFiles];
-    
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -277,7 +277,7 @@ export default function App() {
 
     const selectedModelData = MODEL_CONFIG.find(m => m.id === activeModel) || MODEL_CONFIG[0];
     const otherModels = MODEL_CONFIG.filter(m => m.id !== activeModel);
-    
+
     const models = [
       { type: selectedModelData.type, name: selectedModelData.id },
       ...otherModels.map(m => ({ type: m.type, name: m.id })),
@@ -301,24 +301,24 @@ export default function App() {
     while (modelIndex < models.length && !success) {
       const currentModel = models[modelIndex];
       setActiveModel(currentModel.name);
-      
+
       try {
         setIsThinking(true);
         let fullText = '';
 
         if (currentModel.type === 'gemini') {
           const parts: any[] = [{ text: userInput || "Analyze the following." }];
-          
+
           currentFiles.forEach(file => {
             if (file.extractedText) {
-               parts.push({ text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
+              parts.push({ text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
             } else {
-               parts.push({
-                 inlineData: {
-                   data: file.data,
-                   mimeType: file.type || 'application/octet-stream'
-                 }
-               });
+              parts.push({
+                inlineData: {
+                  data: file.data,
+                  mimeType: file.type || 'application/octet-stream'
+                }
+              });
             }
           });
 
@@ -335,7 +335,7 @@ export default function App() {
             const chunkText = chunk.text;
             if (chunkText) {
               fullText += chunkText;
-              setMessages(prev => prev.map(msg => 
+              setMessages(prev => prev.map(msg =>
                 msg.id === aiMessageId ? { ...msg, content: fullText } : msg
               ));
             }
@@ -343,23 +343,23 @@ export default function App() {
         } else {
           // Mistral AI
           const systemMsg = "You are Yin Ai, a powerful multimodal assistant. You can analyze documents (PDF, Docx, images), write code, generate SVGs and icons, and solve complex problems. When asked for icons or graphics, prefer generating clean SVG code that the user can copy. Be professional, fast, and helpful.";
-          
+
           const contentParts: any[] = [{ type: 'text', text: userInput || "Analyze the following files." }];
-          
+
           let hasPPTX = false;
           currentFiles.forEach(file => {
-             if (file.name.endsWith('.pptx')) {
-                hasPPTX = true;
-             }
-             if (file.extractedText) {
-                contentParts.push({ type: 'text', text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
-             } else if (file.type.startsWith('image/')) {
-                contentParts.push({ type: 'image_url', image_url: `data:${file.type};base64,${file.data}` });
-             }
+            if (file.name.endsWith('.pptx')) {
+              hasPPTX = true;
+            }
+            if (file.extractedText) {
+              contentParts.push({ type: 'text', text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
+            } else if (file.type.startsWith('image/')) {
+              contentParts.push({ type: 'image_url', image_url: `data:${file.type};base64,${file.data}` });
+            }
           });
 
           if (hasPPTX && currentModel.type === 'mistral') {
-             alert('Warning: PPTX extraction is currently not fully supported by this model. To analyze PPTX thoroughly, please select a Gemini model, or convert to PDF/Text first.');
+            alert('Warning: PPTX extraction is currently not fully supported by this model. To analyze PPTX thoroughly, please select a Gemini model, or convert to PDF/Text first.');
           }
 
           const messages: any[] = [
@@ -377,22 +377,22 @@ export default function App() {
             const chunkText = chunk.data.choices[0].delta.content;
             if (typeof chunkText === 'string') {
               fullText += chunkText;
-              setMessages(prev => prev.map(msg => 
+              setMessages(prev => prev.map(msg =>
                 msg.id === aiMessageId ? { ...msg, content: fullText } : msg
               ));
             }
           }
         }
 
-        setMessages(prev => prev.map(msg => 
+        setMessages(prev => prev.map(msg =>
           msg.id === aiMessageId ? { ...msg, isStreaming: false } : msg
         ));
         success = true;
       } catch (error: any) {
         console.error(`Error with model ${currentModel.name}:`, error);
-        
+
         const isQuotaError = error?.message?.includes('quota') || error?.message?.includes('429') || error?.status === 'RESOURCE_EXHAUSTED' || error?.status === 429;
-        
+
         if (isQuotaError && modelIndex < models.length - 1) {
           modelIndex++;
           console.log(`Switching to next model: ${models[modelIndex].name}`);
@@ -401,14 +401,14 @@ export default function App() {
 
         setIsThinking(false);
         let errorMsg = 'I encountered an error. This might be due to file size, type, or API quota. Please try again.';
-        
+
         if (isQuotaError) {
           errorMsg = '⚠️ **Quota Exceeded (Error 429)**: All available AI models have reached their usage limits. \n\n**How to fix:**\n1. If you just updated the key on Netlify, you **MUST** go to Deploys > Trigger Deploy > **Clear cache and deploy site**.\n2. Check your [Google AI Studio Plan](https://aistudio.google.com/app/plan_and_billing) or Mistral account.';
         } else if (error?.message?.includes('API key') || error?.message?.includes('403')) {
           errorMsg = 'There is an issue with the API key configuration. Please check your environment variables.';
         }
 
-        setMessages(prev => prev.map(msg => 
+        setMessages(prev => prev.map(msg =>
           msg.id === aiMessageId ? { ...msg, content: errorMsg, isStreaming: false } : msg
         ));
         success = true; // Stop loop
@@ -450,7 +450,7 @@ export default function App() {
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
             <div className="relative">
-              <button 
+              <button
                 onClick={() => setShowModelSelector(!showModelSelector)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-secondary)] rounded-lg hover:bg-[var(--bg-primary)] border border-transparent hover:border-[var(--primary-color)] transition-all"
               >
@@ -463,7 +463,7 @@ export default function App() {
 
               <AnimatePresence>
                 {showModelSelector && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -521,8 +521,8 @@ export default function App() {
                 { icon: <Languages size={24} />, title: "Translate", desc: "Global Support", color: "var(--warning-color)" },
                 { icon: <Maximize2 size={24} />, title: "Summarize", desc: "Long Texts", color: "var(--primary-color)" }
               ].map((item, i) => (
-                <motion.div 
-                  key={i} 
+                <motion.div
+                  key={i}
                   whileHover={{ y: -5 }}
                   className="info-card !m-0 flex flex-col items-center text-center gap-2 p-4 cursor-pointer hover:border-[var(--primary-color)] border border-transparent transition-all"
                 >
@@ -564,7 +564,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
-                      <ReactMarkdown 
+                      <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
                           code({ node, inline, className, children, ...props }: any) {
@@ -604,7 +604,7 @@ export default function App() {
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary-color)]">Yin Ai is thinking...</span>
                 </div>
                 <div className="h-2 w-32 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div 
+                  <motion.div
                     initial={{ x: '-100%' }}
                     animate={{ x: '100%' }}
                     transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
@@ -629,7 +629,7 @@ export default function App() {
                 <span className="text-xs font-mono font-bold text-[var(--primary-color)]">{fileProgress}%</span>
               </div>
               <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${fileProgress}%` }}
                   className="h-full bg-gradient-to-r from-[var(--primary-color)] to-[var(--secondary-color)]"
@@ -646,11 +646,11 @@ export default function App() {
                 </span>
               </div>
               <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <motion.div 
-                   initial={{ width: 0 }}
-                   animate={{ width: "100%" }}
-                   transition={{ duration: 0.8, ease: "linear" }}
-                   className="h-full bg-gradient-to-r from-[var(--primary-color)] to-[var(--secondary-color)]"
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 0.8, ease: "linear" }}
+                  className="h-full bg-gradient-to-r from-[var(--primary-color)] to-[var(--secondary-color)]"
                 />
               </div>
             </div>
@@ -668,18 +668,18 @@ export default function App() {
             </motion.div>
           )}
           <form onSubmit={handleSubmit} className="flex gap-2 items-end bg-[var(--bg-secondary)] p-2 rounded-2xl border-2 border-transparent focus-within:border-[var(--primary-color)] transition-all">
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               className="p-3 text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"
             >
               <Paperclip size={22} />
             </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileChange} 
-              className="hidden" 
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
               multiple
               accept=".pdf,.docx,.pptx,.txt,.csv,.md,.png,.jpg,.jpeg,.svg"
             />
@@ -697,8 +697,8 @@ export default function App() {
               rows={1}
               className="flex-1 bg-transparent border-none focus:ring-0 p-3 text-sm resize-none max-h-32 overflow-y-auto"
             />
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
               className="p-3 bg-[var(--primary-color)] text-white rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-20 disabled:scale-100"
             >

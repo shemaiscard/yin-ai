@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
 import * as mammoth from 'mammoth';
 
 // Set up PDF.js worker
