@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+:root {
+    --primary-color: #4F46E5;
+    --secondary-color: #3B82F6;
+    --accent-color: #06B6D4;
+    --success-color: #10B981;
+    --error-color: #EF4444;
+    --warning-color: #F59E0B;
+    --text-primary: #1F2937;
+    --text-secondary: #4B5563;
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F3F4F6;
+    --bg-primary-rgb: 255, 255, 255;
+    --bg-secondary-rgb: 243, 244, 246;
+}
+
+[data-theme="dark"] {
+    --primary-color: #6366F1;
+    --secondary-color: #60A5FA;
+    --accent-color: #22D3EE;
+    --success-color: #34D399;
+    --error-color: #F87171;
+    --warning-color: #FBBF24;
+    --text-primary: #F9FAFB;
+    --text-secondary: #E5E7EB;
+    --bg-primary: #111827;
+    --bg-secondary: #1F2937;
+    --bg-primary-rgb: 17, 24, 39;
+    --bg-secondary-rgb: 31, 41, 55;
+}
+
+/* Main Container Styles */
+.main-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: linear-gradient(
+        135deg,
+        rgba(var(--bg-primary-rgb), 0.95),
+        rgba(var(--bg-secondary-rgb), 0.95)
+    );
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+/* Header Styles */
+.stTitle {
+    color: var(--primary-color) !important;
+    font-size: 2.5rem !important;
+    font-weight: 800 !important;
+    text-align: center;
+    margin-bottom: 2rem !important;
+    background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Input Field Styles */
+.stTextInput input {
+    border: 2px solid var(--primary-color) !important;
+    border-radius: 10px !important;
+    padding: 0.75rem 1rem !important;
+    font-size: 1rem !important;
+    transition: all 0.3s ease;
+    width: 100%;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.stTextInput input:focus {
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2) !important;
+    outline: none;
+}
+
+/* Button Styles */
+.stButton > button {
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color)) !important;
+    color: white !important;
+    border: none !important;
+    padding: 0.75rem 2rem !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    cursor: pointer;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
+}
+
+.stButton > button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Card Styles */
+.info-card {
+    background: var(--bg-secondary);
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    color: var(--text-primary);
+}
+
+/* Radio Button Styles */
+.stRadio > label {
+    color: var(--text-primary) !important;
+}
+
+/* Alert and Message Styles */
+.stAlert {
+    border-radius: 10px !important;
+    padding: 1rem !important;
+}
+
+.success {
+    background-color: var(--success-color) !important;
+    color: white !important;
+}
+    
+/* Progress Bar Styles */
+.stProgress > div > div {
+    background: linear-gradient(
+        45deg,
+        #10B981,
+        #3B82F6
+    ) !important;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.error {
+    background-color: var(--error-color) !important;
+    color: white !important;
+}
+
+.warning {
+    background-color: var(--warning-color) !important;
+    color: white !important;
+}
+
+/* Chat Message Styles */
+.chat-message {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border-radius: 18px;
+    max-width: 85%;
+    font-size: 0.95rem;
+}
+
+.user-message {
+    background: var(--primary-color);
+    color: white;
+    align-self: flex-end;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+}
+
+.ai-message {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--bg-secondary);
+    border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .main-container {
+        padding: 1rem;
+        height: 100vh;
+        max-height: none;
+        border-radius: 0;
+    }
+    
+    .stTitle {
+        font-size: 1.5rem !important;
+    }
+
+    .chat-message {
+        max-width: 90%;
+    }
+}
