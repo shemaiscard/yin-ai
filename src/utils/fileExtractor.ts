@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
+import * as mammoth from 'mammoth';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -22,7 +22,8 @@ export const extractTextFromFile = async (file: File): Promise<string> => {
     return await extractDocxText(file);
   }
 
-  throw new Error(`Unsupported file type for text extraction: ${extension || file.type}`);
+  console.warn(`Unsupported file type for local text extraction: ${extension || file.type}. Falling back to API parsing.`);
+  return "";
 };
 
 const extractPdfText = async (file: File): Promise<string> => {
