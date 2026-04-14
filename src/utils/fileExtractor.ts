@@ -1,0 +1,57 @@
+import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+export const extractTextFromFile = async (file: File): Promise<string> => {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+
+  // 1. Text or Markdown
+  if (file.type.startsWith('text/') || extension === 'md' || extension === 'csv') {
+    return await file.text();
+  }
+
+  // 2. PDF Parsing via pdfjs-dist
+  if (file.type === 'application/pdf' || extension === 'pdf') {
+    return await extractPdfText(file);
+  }
+
+  // 3. DOCX Parsing via mammoth
+  if (extension === 'docx' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    return await extractDocxText(file);
+  }
+
+  throw new Error(`Unsupported file type for text extraction: ${extension || file.type}`);
+};
+
+const extractPdfText = async (file: File): Promise<string> => {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const strings = content.items.map((item: any) => item.str);
+      fullText += strings.join(' ') + '\n';
+    }
+    
+    return fullText.trim();
+  } catch (error) {
+    console.error("PDF extraction failed:", error);
+    throw new Error("Failed to read PDF document.");
+  }
+};
+
+const extractDocxText = async (file: File): Promise<string> => {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value.trim();
+  } catch (error) {
+    console.error("DOCX extraction failed:", error);
+    throw new Error("Failed to read DOCX document.");
+  }
+};

@@ -40,6 +40,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'motion/react';
+import { extractTextFromFile } from './utils/fileExtractor';
 
 // Initialize Gemini API
 const getApiKey = () => {
@@ -107,9 +108,16 @@ interface Message {
   role: 'user' | 'ai';
   content: string;
   type: 'text' | 'image' | 'file';
-  fileName?: string;
+  files?: { name: string, type: string }[];
   timestamp: Date;
   isStreaming?: boolean;
+}
+
+export interface AttachedFile {
+  name: string;
+  data: string;
+  type: string;
+  extractedText?: string;
 }
 
 const CodeBlock = ({ children, ...props }: any) => {
@@ -149,7 +157,8 @@ export default function App() {
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [fileProgress, setFileProgress] = useState<number | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [attachedFile, setAttachedFile] = useState<{ name: string, data: string, type: string } | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [isUploadingToAI, setIsUploadingToAI] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -182,7 +191,7 @@ export default function App() {
       const time = msg.timestamp.toLocaleString();
       const role = msg.role === 'user' ? 'USER' : 'giscard AI';
       const content = msg.type === 'image' ? '[Generated Image]' : 
-                      msg.type === 'file' ? `[Attached File: ${msg.fileName}]` : msg.content;
+                      msg.type === 'file' ? `[Attached Files: ${msg.files?.map(f => f.name).join(', ')}]` : msg.content;
       return `[${time}] ${role}:\n${content}\n${'-'.repeat(40)}`;
     }).join('\n\n');
 
@@ -197,52 +206,74 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFileProgress(0);
-      const reader = new FileReader();
-      
-      reader.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          setFileProgress(progress);
-        }
-      };
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setAttachedFile({
+    setFileProgress(0);
+    const newFiles: AttachedFile[] = [];
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`File ${file.name} is too large. Max size is 5MB.`);
+        continue;
+      }
+
+      try {
+        let extractedText = undefined;
+        if (!file.type.startsWith('image/')) {
+           extractedText = await extractTextFromFile(file);
+        }
+
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        newFiles.push({
           name: file.name,
           data: base64.split(',')[1],
-          type: file.type
+          type: file.type,
+          extractedText
         });
-        setFileProgress(null);
-      };
+      } catch (err: any) {
+         alert(`Error reading file ${file.name}: ${err.message}`);
+      }
 
-      reader.onerror = () => {
-        setFileProgress(null);
-        alert("Failed to read file.");
-      };
-
-      reader.readAsDataURL(file);
+      setFileProgress(Math.round(((i + 1) / files.length) * 100));
     }
+    
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+    setFileProgress(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const generateResponse = async (userInput: string) => {
+    if (!userInput.trim() && attachedFiles.length === 0) return;
     setIsLoading(true);
+    
+    // Simulate "Upload to AI" progress
+    setIsUploadingToAI(true);
+    await new Promise(resolve => setTimeout(resolve, 800)); // Brief simulated wait or processing time
+    setIsUploadingToAI(false);
+
+    const currentFiles = [...attachedFiles];
+    
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: userInput || (attachedFile ? `Uploaded file: ${attachedFile.name}` : ''),
-      type: attachedFile ? 'file' : 'text',
-      fileName: attachedFile?.name,
+      content: userInput || (currentFiles.length > 0 ? `Uploaded ${currentFiles.length} file(s)` : ''),
+      type: currentFiles.length > 0 ? 'file' : 'text',
+      files: currentFiles.map(f => ({ name: f.name, type: f.type })),
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
-    const currentFile = attachedFile;
-    setAttachedFile(null);
+    setAttachedFiles([]);
 
     const selectedModelData = MODEL_CONFIG.find(m => m.id === activeModel) || MODEL_CONFIG[0];
     const otherModels = MODEL_CONFIG.filter(m => m.id !== activeModel);
@@ -276,15 +307,20 @@ export default function App() {
         let fullText = '';
 
         if (currentModel.type === 'gemini') {
-          const parts: any[] = [{ text: userInput || "Analyze this file." }];
-          if (currentFile) {
-            parts.push({
-              inlineData: {
-                data: currentFile.data,
-                mimeType: currentFile.type || 'application/octet-stream'
-              }
-            });
-          }
+          const parts: any[] = [{ text: userInput || "Analyze the following." }];
+          
+          currentFiles.forEach(file => {
+            if (file.extractedText) {
+               parts.push({ text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
+            } else {
+               parts.push({
+                 inlineData: {
+                   data: file.data,
+                   mimeType: file.type || 'application/octet-stream'
+                 }
+               });
+            }
+          });
 
           const responseStream = await ai.models.generateContentStream({
             model: currentModel.name,
@@ -306,21 +342,30 @@ export default function App() {
           }
         } else {
           // Mistral AI
-          const messages: any[] = [
-            { role: 'system', content: "You are Yin Ai, a powerful multimodal assistant. You can analyze documents (PDF, Docx, images), write code, generate SVGs and icons, and solve complex problems. When asked for icons or graphics, prefer generating clean SVG code that the user can copy. Be professional, fast, and helpful." }
-          ];
+          const systemMsg = "You are Yin Ai, a powerful multimodal assistant. You can analyze documents (PDF, Docx, images), write code, generate SVGs and icons, and solve complex problems. When asked for icons or graphics, prefer generating clean SVG code that the user can copy. Be professional, fast, and helpful.";
+          
+          const contentParts: any[] = [{ type: 'text', text: userInput || "Analyze the following files." }];
+          
+          let hasPPTX = false;
+          currentFiles.forEach(file => {
+             if (file.name.endsWith('.pptx')) {
+                hasPPTX = true;
+             }
+             if (file.extractedText) {
+                contentParts.push({ type: 'text', text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
+             } else if (file.type.startsWith('image/')) {
+                contentParts.push({ type: 'image_url', image_url: `data:${file.type};base64,${file.data}` });
+             }
+          });
 
-          if (currentFile && currentFile.type.startsWith('image/')) {
-            messages.push({
-              role: 'user',
-              content: [
-                { type: 'text', text: userInput || "Analyze this image." },
-                { type: 'image_url', image_url: `data:${currentFile.type};base64,${currentFile.data}` }
-              ]
-            });
-          } else {
-            messages.push({ role: 'user', content: userInput || "Hello!" });
+          if (hasPPTX && currentModel.type === 'mistral') {
+             alert('Warning: PPTX extraction is currently not fully supported by this model. To analyze PPTX thoroughly, please select a Gemini model, or convert to PDF/Text first.');
           }
+
+          const messages: any[] = [
+            { role: 'system', content: systemMsg },
+            { role: 'user', content: contentParts.length > 1 ? contentParts : (userInput || "Hello!") }
+          ];
 
           const responseStream = await mistral.chat.stream({
             model: currentModel.name,
@@ -372,9 +417,13 @@ export default function App() {
     setIsLoading(false);
   };
 
+  const removeStagedFile = (idxToRemove: number) => {
+    setAttachedFiles(prev => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if ((input.trim() || attachedFile) && !isLoading) {
+    if ((input.trim() || attachedFiles.length > 0) && !isLoading) {
       generateResponse(input);
     }
   };
@@ -588,11 +637,34 @@ export default function App() {
               </div>
             </div>
           )}
-          {attachedFile && !fileProgress && (
-            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="absolute bottom-full left-0 mb-2 p-2 bg-[var(--bg-secondary)] rounded-lg flex items-center gap-2 shadow-lg border border-[var(--primary-color)]">
-              <FileText size={16} className="text-[var(--primary-color)]" />
-              <span className="text-xs truncate max-w-[150px]">{attachedFile.name}</span>
-              <button onClick={() => setAttachedFile(null)} className="p-1 hover:bg-red-500/10 text-red-500 rounded-full"><X size={14} /></button>
+          {isUploadingToAI && (
+            <div className="absolute bottom-full left-0 w-full mb-2 bg-[var(--bg-secondary)] rounded-lg p-3 shadow-xl border border-[var(--primary-color)]">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin text-[var(--primary-color)]" />
+                  Uploading to AI limits...
+                </span>
+              </div>
+              <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <motion.div 
+                   initial={{ width: 0 }}
+                   animate={{ width: "100%" }}
+                   transition={{ duration: 0.8, ease: "linear" }}
+                   className="h-full bg-gradient-to-r from-[var(--primary-color)] to-[var(--secondary-color)]"
+                />
+              </div>
+            </div>
+          )}
+
+          {attachedFiles.length > 0 && !fileProgress && !isUploadingToAI && (
+            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="absolute bottom-full left-0 mb-2 flex gap-2 overflow-x-auto max-w-full pb-1 custom-scrollbar">
+              {attachedFiles.map((f, idx) => (
+                <div key={idx} className="p-2 bg-[var(--bg-secondary)] rounded-lg flex items-center gap-2 shadow-lg border border-[var(--primary-color)] whitespace-nowrap">
+                  <FileText size={16} className="text-[var(--primary-color)]" />
+                  <span className="text-xs truncate max-w-[120px]">{f.name}</span>
+                  <button onClick={() => removeStagedFile(idx)} className="p-1 hover:bg-red-500/10 text-red-500 rounded-full"><X size={14} /></button>
+                </div>
+              ))}
             </motion.div>
           )}
           <form onSubmit={handleSubmit} className="flex gap-2 items-end bg-[var(--bg-secondary)] p-2 rounded-2xl border-2 border-transparent focus-within:border-[var(--primary-color)] transition-all">
@@ -608,7 +680,8 @@ export default function App() {
               ref={fileInputRef} 
               onChange={handleFileChange} 
               className="hidden" 
-              accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg"
+              multiple
+              accept=".pdf,.docx,.pptx,.txt,.csv,.md,.png,.jpg,.jpeg,.svg"
             />
             <textarea
               value={input}
@@ -626,7 +699,7 @@ export default function App() {
             />
             <button 
               type="submit" 
-              disabled={(!input.trim() && !attachedFile) || isLoading}
+              disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
               className="p-3 bg-[var(--primary-color)] text-white rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-20 disabled:scale-100"
             >
               <Send size={20} />
