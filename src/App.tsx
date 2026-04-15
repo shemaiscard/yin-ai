@@ -453,7 +453,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-[var(--primary-color)] to-[var(--accent-color)] bg-clip-text text-transparent">Giscard AI</h1>
-              <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-widest font-semibold">by Shema Nkindi Giscard</p>
+              <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-widest font-semibold"></p>
             </div>
           </div>
           <div className="flex gap-1 md:gap-2">
