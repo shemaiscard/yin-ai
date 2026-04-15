@@ -68,7 +68,7 @@ const MODEL_CONFIG = [
   {
     id: 'mistral-small-latest',
     type: 'mistral',
-    name: 'Mistral Small',
+    name: 'Model 1',
     desc: 'Ultra-fast & Reliable',
     caps: 'Text, Code, Reasoning',
     limit: 'Best for general chat',
@@ -77,7 +77,7 @@ const MODEL_CONFIG = [
   {
     id: 'pixtral-12b-2409',
     type: 'mistral',
-    name: 'Pixtral 12B',
+    name: 'Model 2',
     desc: 'Multimodal Expert',
     caps: 'Images, Text, Vision',
     limit: 'Best for file analysis',
@@ -86,22 +86,36 @@ const MODEL_CONFIG = [
   {
     id: 'gemini-2.0-flash',
     type: 'gemini',
-    name: 'Gemini 2.0 Flash',
+    name: 'Model 3',
     desc: 'Next-Gen Intelligence',
     caps: 'Multimodal, High Speed',
-    limit: 'Free Tier Quota',
+    limit: 'Versatile & Fast',
     color: 'var(--secondary-color)'
   },
   {
     id: 'gemini-1.5-pro',
     type: 'gemini',
-    name: 'Gemini 1.5 Pro',
+    name: 'Model 4',
     desc: 'Deep Reasoning',
     caps: 'Complex Logic, Large Context',
-    limit: 'Lower Rate Limits',
+    limit: 'Best for hard problems',
     color: 'var(--warning-color)'
   }
 ];
+
+// System identity injected into every model
+const SYSTEM_INSTRUCTION = `You are Giscard AI, a highly capable and intelligent multimodal assistant created by Shema Nkindi Giscard — a versatile software developer based in Seoul, Korea, with expertise in web development, computer graphics, cybersecurity, and artificial intelligence. Giscard built Giscard AI to provide intelligent, multimodal assistance to users worldwide.
+
+About your creator, Shema Nkindi Giscard:
+- Full-stack developer skilled in Python, React, Flask, Django, Java, C++, and SQL
+- Expert in Computer Vision (OpenCV, DeepFace), AI/ML (TensorFlow), and 3D Graphics (Blender, OpenGL)
+- Specializes in Cybersecurity: cryptography (AES, RSA, Twofish), network recon (Nmap), and secure auth systems
+- Creator of multiple projects: Ze Video Downloader, Ze Matrix, Cipher Shield Suite, LogoScope, Zarduino, Amakarita, and more
+- Portfolio: https://www.giscard.me
+
+When a user directly asks who you are, who made you, or who created you — respond clearly: "I am Giscard AI, created by Shema Nkindi Giscard." You may elaborate warmly about your creator if the user seems curious. Do NOT mention any underlying AI model names (such as Gemini, Mistral, GPT, etc.) under any circumstances.
+
+Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.`;
 
 interface Message {
   id: string;
@@ -189,7 +203,7 @@ export default function App() {
 
     const chatText = messages.map(msg => {
       const time = msg.timestamp.toLocaleString();
-      const role = msg.role === 'user' ? 'USER' : 'Giscard AI';
+      const role = msg.role === 'user' ? 'YOU' : 'Giscard AI';
       const content = msg.type === 'image' ? '[Generated Image]' :
         msg.type === 'file' ? `[Attached Files: ${msg.files?.map(f => f.name).join(', ')}]` : msg.content;
       return `[${time}] ${role}:\n${content}\n${'-'.repeat(40)}`;
@@ -199,7 +213,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `giscard-ai-chat-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `yin-ai-chat-${new Date().toISOString().split('T')[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -326,7 +340,7 @@ export default function App() {
             model: currentModel.name,
             contents: [{ role: 'user', parts }],
             config: {
-              systemInstruction: "You are Giscard Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.",
+              systemInstruction: SYSTEM_INSTRUCTION,
             }
           });
 
@@ -342,7 +356,7 @@ export default function App() {
           }
         } else {
           // Mistral AI
-          const systemMsg = "You are Giscard Ai, a highly capable and intelligent multimodal assistant. Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.";
+          const systemMsg = SYSTEM_INSTRUCTION;
 
           const contentParts: any[] = [{ type: 'text', text: userInput || "Analyze the following files." }];
 
@@ -438,8 +452,8 @@ export default function App() {
               <Cpu size={28} className="animate-pulse" />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-[var(--primary-color)] to-[var(--accent-color)] bg-clip-text text-transparent">Giscard Ai</h1>
-              <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-widest font-semibold">Multimodal Intelligence</p>
+              <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-[var(--primary-color)] to-[var(--accent-color)] bg-clip-text text-transparent">Giscard AI</h1>
+              <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-widest font-semibold">by Shema Nkindi Giscard</p>
             </div>
           </div>
           <div className="flex gap-1 md:gap-2">
@@ -617,7 +631,7 @@ export default function App() {
                     <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.2s]" />
                     <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.4s]" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary-color)]">Giscard Ai is thinking...</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary-color)]">Giscard AI is thinking...</span>
                 </div>
                 <div className="h-2 w-32 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <motion.div
@@ -701,14 +715,19 @@ export default function App() {
             />
             <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-resize textarea
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSubmit(e);
                 }
               }}
-              placeholder="Message giscard AI..."
+              placeholder="Message Giscard AI… (Shift+Enter for new line)"
               disabled={isLoading}
               rows={1}
               className="flex-1 bg-transparent border-none focus:ring-0 p-3 text-sm resize-none max-h-32 overflow-y-auto"
@@ -721,7 +740,14 @@ export default function App() {
               <Send size={20} />
             </button>
           </form>
-          <p className="text-[9px] text-center mt-2 text-[var(--text-secondary)] opacity-50">giscard AI can make mistakes. Check important info.</p>
+          <div className="flex justify-between items-center mt-2 px-1">
+            <p className="text-[9px] text-[var(--text-secondary)] opacity-50">Giscard AI can make mistakes. Verify important info.</p>
+            {input.length > 0 && (
+              <span className={`text-[9px] font-mono opacity-60 ${input.length > 3800 ? 'text-red-400' : 'text-[var(--text-secondary)]'}`}>
+                {input.length}/4000
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
