@@ -128,7 +128,7 @@ const CodeBlock = ({ children, ...props }: any) => {
           {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
         </button>
       </div>
-      <pre className="!bg-[#1e1e1e] !p-4 rounded-xl overflow-x-auto border border-white/5 font-mono text-sm leading-relaxed" {...props}>
+      <pre className="!bg-[#1e1e1e] !text-gray-200 !p-4 rounded-xl overflow-x-auto border border-white/5 font-mono text-sm leading-relaxed" {...props}>
         <code>{children}</code>
       </pre>
     </div>
