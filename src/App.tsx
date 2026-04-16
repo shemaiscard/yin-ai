@@ -35,7 +35,11 @@ import {
   Settings,
   ChevronDown,
   Sparkles,
-  Zap
+  Zap,
+  Mic,
+  Volume2,
+  VolumeX,
+  MicOff
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -64,43 +68,12 @@ const getMistralKey = () => {
 
 const mistral = new Mistral({ apiKey: getMistralKey() });
 
-const MODEL_CONFIG = [
-  {
-    id: 'mistral-small-latest',
-    type: 'mistral',
-    name: 'Model 1',
-    desc: 'Ultra-fast & Reliable',
-    caps: 'Text, Code, Reasoning',
-    limit: 'Best for general chat',
-    color: 'var(--primary-color)'
-  },
-  {
-    id: 'pixtral-12b-2409',
-    type: 'mistral',
-    name: 'Model 2',
-    desc: 'Multimodal Expert',
-    caps: 'Images, Text, Vision',
-    limit: 'Best for file analysis',
-    color: 'var(--accent-color)'
-  },
-  {
-    id: 'gemini-2.0-flash',
-    type: 'gemini',
-    name: 'Model 3',
-    desc: 'Next-Gen Intelligence',
-    caps: 'Multimodal, High Speed',
-    limit: 'Versatile & Fast',
-    color: 'var(--secondary-color)'
-  },
-  {
-    id: 'gemini-1.5-pro',
-    type: 'gemini',
-    name: 'Model 4',
-    desc: 'Deep Reasoning',
-    caps: 'Complex Logic, Large Context',
-    limit: 'Best for hard problems',
-    color: 'var(--warning-color)'
-  }
+// Array of fallback models in strict priority order invisible to user
+const FALLBACK_MODELS = [
+  { id: 'gemini-3-flash-preview', type: 'gemini', provider: 'google' },
+  { id: 'gemini-3.1-flash-lite-preview', type: 'gemini', provider: 'google' },
+  { id: 'gemini-flash-latest', type: 'gemini', provider: 'google' },
+  { id: 'mistral-small-latest', type: 'mistral', provider: 'mistral' }
 ];
 
 // System identity injected into every model
@@ -167,14 +140,95 @@ export default function App() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [activeModel, setActiveModel] = useState('mistral-small-latest');
-  const [showModelSelector, setShowModelSelector] = useState(false);
   const [fileProgress, setFileProgress] = useState<number | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isUploadingToAI, setIsUploadingToAI] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Speech Recognition Setup
+  const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (SpeechRecognitionAPI) {
+      recognitionRef.current = new SpeechRecognitionAPI();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.onresult = (event: any) => {
+        let currentTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+        setInput((prev) => {
+           // We might want to handle prev nicely, but resetting or appending smartly is better
+           // Since it's continuous interim results, we'll just set it
+           return currentTranscript;
+        });
+      };
+      recognitionRef.current.onerror = () => setIsListening(false);
+      recognitionRef.current.onend = () => setIsListening(false);
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      if (!SpeechRecognitionAPI) {
+        alert("Speech Recognition is not supported by your browser.");
+        return;
+      }
+      setInput(''); // clear input when starting new dictation
+      recognitionRef.current?.start();
+      setIsListening(true);
+    }
+  };
+
+  const toggleMessageTTS = (messageId: string, text: string) => {
+    if (playingMessageId === messageId) {
+      window.speechSynthesis.cancel();
+      setPlayingMessageId(null);
+    } else {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.onend = () => setPlayingMessageId(null);
+      utterance.onerror = () => setPlayingMessageId(null);
+      setPlayingMessageId(messageId);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Load from LocalStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('yin-ai-chat-history');
+    if (saved) {
+      try {
+        const parsed: Message[] = JSON.parse(saved);
+        setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
+      } catch (e) {
+        console.error('Failed to parse chat history', e);
+      }
+    }
+  }, []);
+
+  // Save to LocalStorage
+  useEffect(() => {
+    if (messages.length > 0) {
+      // Strip potentially huge base64 data to avoid quota issues on normal text history
+      const safelySerialized = messages.map(msg => {
+         if (msg.type === 'file' && msg.files) {
+            return { ...msg }; // LocalStorage limit shouldn't be hit immediately, but if needed we can drop msg.files
+         }
+         return msg;
+      });
+      localStorage.setItem('yin-ai-chat-history', JSON.stringify(safelySerialized));
+    }
+  }, [messages]);
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -196,6 +250,7 @@ export default function App() {
 
   const clearChat = () => {
     setMessages([]);
+    localStorage.removeItem('yin-ai-chat-history');
   };
 
   const downloadChat = () => {
@@ -289,14 +344,10 @@ export default function App() {
     setInput('');
     setAttachedFiles([]);
 
-    const selectedModelData = MODEL_CONFIG.find(m => m.id === activeModel) || MODEL_CONFIG[0];
-    const otherModels = MODEL_CONFIG.filter(m => m.id !== activeModel);
+    // Dynamic System Instruction with Timezone and Local Time
+    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}\n\n[SYSTEM INFO]\nThe current date and time is: ${new Date().toLocaleString()}, in the timezone: ${userTimeZone}. Use this to accurately calculate global times if asked.`;
 
-    const models = [
-      { type: selectedModelData.type, name: selectedModelData.id },
-      ...otherModels.map(m => ({ type: m.type, name: m.id })),
-      { type: 'gemini', name: 'gemini-1.5-flash' }
-    ];
     let modelIndex = 0;
     let success = false;
 
@@ -312,9 +363,8 @@ export default function App() {
     setMessages(prev => [...prev, initialAiMessage]);
     setIsLoading(false);
 
-    while (modelIndex < models.length && !success) {
-      const currentModel = models[modelIndex];
-      setActiveModel(currentModel.name);
+    while (modelIndex < FALLBACK_MODELS.length && !success) {
+      const currentModel = FALLBACK_MODELS[modelIndex];
 
       try {
         setIsThinking(true);
@@ -336,12 +386,18 @@ export default function App() {
             }
           });
 
+          // Define tools for Gemini (enable google search grounding)
+          // Some environments/model versions might throw if tools is passed but unsupported,
+          // however gemini-flash and pro 1.5/2.0 normally support it
+          const config: any = {
+            systemInstruction: dynamicSystemInstruction,
+            tools: [{ googleSearch: {} }]
+          };
+
           const responseStream = await ai.models.generateContentStream({
-            model: currentModel.name,
+            model: currentModel.id,
             contents: [{ role: 'user', parts }],
-            config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
-            }
+            config: config
           });
 
           setIsThinking(false);
@@ -356,7 +412,7 @@ export default function App() {
           }
         } else {
           // Mistral AI
-          const systemMsg = SYSTEM_INSTRUCTION;
+          const systemMsg = dynamicSystemInstruction;
 
           const contentParts: any[] = [{ type: 'text', text: userInput || "Analyze the following files." }];
 
@@ -382,7 +438,7 @@ export default function App() {
           ];
 
           const responseStream = await mistral.chat.stream({
-            model: currentModel.name,
+            model: currentModel.id,
             messages: messages,
           });
 
@@ -403,13 +459,13 @@ export default function App() {
         ));
         success = true;
       } catch (error: any) {
-        console.error(`Error with model ${currentModel.name}:`, error);
+        console.error(`Error with model ${currentModel.id}:`, error);
 
         const isQuotaError = error?.message?.includes('quota') || error?.message?.includes('429') || error?.status === 'RESOURCE_EXHAUSTED' || error?.status === 429;
 
-        if (isQuotaError && modelIndex < models.length - 1) {
+        if (isQuotaError && modelIndex < FALLBACK_MODELS.length - 1) {
           modelIndex++;
-          console.log(`Switching to next model: ${models[modelIndex].name}`);
+          console.log(`Switching to next model: ${FALLBACK_MODELS[modelIndex].id}`);
           continue;
         }
 
@@ -463,59 +519,6 @@ export default function App() {
             <button onClick={toggleTheme} className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-all text-[var(--text-secondary)]">
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            <div className="relative">
-              <button
-                onClick={() => setShowModelSelector(!showModelSelector)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-secondary)] rounded-lg hover:bg-[var(--bg-primary)] border border-transparent hover:border-[var(--primary-color)] transition-all"
-              >
-                <Sparkles size={16} className="text-[var(--primary-color)]" />
-                <span className="text-xs font-bold hidden md:inline">
-                  {MODEL_CONFIG.find(m => m.id === activeModel)?.name}
-                </span>
-                <ChevronDown size={14} className={`transition-transform ${showModelSelector ? 'rotate-180' : ''}`} />
-              </button>
-
-              <AnimatePresence>
-                {showModelSelector && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-2 w-72 bg-[var(--bg-primary)] border border-[var(--bg-secondary)] rounded-xl shadow-2xl z-50 overflow-hidden"
-                  >
-                    <div className="p-3 border-b border-[var(--bg-secondary)] bg-[var(--bg-secondary)]/30">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Select Intelligence Engine</h3>
-                    </div>
-                    <div className="p-2 space-y-1">
-                      {MODEL_CONFIG.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => {
-                            setActiveModel(m.id);
-                            setShowModelSelector(false);
-                          }}
-                          className={`w-full flex flex-col gap-1 p-3 rounded-lg text-left transition-all ${activeModel === m.id ? 'bg-[var(--primary-color)] text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
-                        >
-                          <div className="flex justify-between items-center">
-                            <span className="font-bold text-sm">{m.name}</span>
-                            {activeModel === m.id && <Zap size={12} fill="currentColor" />}
-                          </div>
-                          <p className={`text-[10px] ${activeModel === m.id ? 'text-white/80' : 'text-[var(--text-secondary)]'}`}>{m.desc}</p>
-                          <div className="flex gap-2 mt-1">
-                            <span className={`text-[8px] px-1.5 py-0.5 rounded-full ${activeModel === m.id ? 'bg-white/20 text-white' : 'bg-[var(--bg-secondary)] text-[var(--primary-color)]'}`}>
-                              {m.caps}
-                            </span>
-                            <span className={`text-[8px] px-1.5 py-0.5 rounded-full ${activeModel === m.id ? 'bg-white/20 text-white' : 'bg-[var(--bg-secondary)] text-[var(--accent-color)]'}`}>
-                              {m.limit}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
           </div>
         </header>
 
@@ -612,8 +615,19 @@ export default function App() {
                       </ReactMarkdown>
                     </div>
                   )}
-                  <div className={`text-[9px] mt-2 opacity-40 font-mono ${msg.role === 'user' ? 'text-right' : ''}`}>
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <div className={`flex items-center justify-between mt-2 pt-2 border-t border-white/5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`text-[9px] opacity-40 font-mono ${msg.role === 'user' ? 'text-right' : ''}`}>
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    {msg.role === 'ai' && !msg.isStreaming && msg.type === 'text' && (
+                      <button 
+                        onClick={() => toggleMessageTTS(msg.id, msg.content)}
+                        className="p-1 hover:bg-[var(--bg-secondary)] rounded transition-colors text-[var(--text-secondary)] opacity-50 hover:opacity-100"
+                        title="Read aloud"
+                      >
+                        {playingMessageId === msg.id ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                      </button>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -704,6 +718,14 @@ export default function App() {
               className="p-3 text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"
             >
               <Paperclip size={22} />
+            </button>
+            <button
+              type="button"
+              onClick={toggleListening}
+              className={`p-3 transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-[var(--text-secondary)] hover:text-[var(--primary-color)]'}`}
+              title="Dictate"
+            >
+              {isListening ? <MicOff size={22} /> : <Mic size={22} />}
             </button>
             <input
               type="file"
