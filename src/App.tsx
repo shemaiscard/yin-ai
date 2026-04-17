@@ -718,7 +718,7 @@ export default function App() {
         )}
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto mb-4 pb-12 pr-2 space-y-6 custom-scrollbar">
+        <div className={`overflow-y-auto pb-12 pr-2 space-y-6 custom-scrollbar ${messages.length === 0 ? 'hidden' : 'flex-1 mb-4'}`}>
           <AnimatePresence initial={false}>
             {messages.map((msg) => (
               <motion.div
