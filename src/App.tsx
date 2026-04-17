@@ -39,12 +39,19 @@ import {
   Mic,
   Volume2,
   VolumeX,
-  MicOff
+  MicOff,
+  Plus,
+  Presentation,
+  Table,
+  Brain
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'motion/react';
 import { extractTextFromFile } from './utils/fileExtractor';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
+import pptxgen from 'pptxgenjs';
+import * as XLSX from 'xlsx';
 
 // Initialize Gemini API
 const getApiKey = () => {
@@ -68,9 +75,19 @@ const getMistralKey = () => {
 
 const mistral = new Mistral({ apiKey: getMistralKey() });
 
+// Initialize Groq Key Parser
+const getGroqKey = () => {
+  const key = process.env.GROQ_API_KEY || (import.meta as any).env.VITE_GROQ_API_KEY;
+  if (!key || key === 'undefined') {
+    console.warn('Groq API Key not found. Please set GROQ_API_KEY or VITE_GROQ_API_KEY.');
+  }
+  return key || '';
+};
+
 // Array of fallback models in strict priority order invisible to user
 const FALLBACK_MODELS = [
   { id: 'gemini-3-flash-preview', type: 'gemini', provider: 'google' },
+  { id: 'llama-3.3-70b-versatile', type: 'groq', provider: 'groq' },
   { id: 'gemini-3.1-flash-lite-preview', type: 'gemini', provider: 'google' },
   { id: 'gemini-flash-latest', type: 'gemini', provider: 'google' },
   { id: 'mistral-small-latest', type: 'mistral', provider: 'mistral' }
@@ -146,8 +163,66 @@ export default function App() {
   const [isUploadingToAI, setIsUploadingToAI] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const createMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+        setIsCreateMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleDocumentGeneration = async (type: string, topic: string, content: string) => {
+    try {
+      if (type === 'word') {
+        const doc = new Document({
+          sections: [{
+            properties: {},
+            children: content.split('\n').filter(p => p.trim()).map(p => new Paragraph({
+              children: [new TextRun(p)],
+              spacing: { after: 200 }
+            }))
+          }]
+        });
+        const blob = await Packer.toBlob(doc);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${topic.replace(/[^a-z0-9]/gi, '_')}.docx`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else if (type === 'ppt') {
+        const pptx = new pptxgen();
+        const slides = content.split('---SLIDE---');
+        slides.forEach((slideContent) => {
+          const lines = slideContent.split('\n').filter(l => l.trim());
+          if (lines.length > 0) {
+            const slide = pptx.addSlide();
+            slide.addText(lines[0], { x: 0.5, y: 0.5, w: '90%', h: 1, fontSize: 32, bold: true, color: '363636' });
+            if (lines.length > 1) {
+              const bullets = lines.slice(1).map(l => l.replace(/^[-*•]\s*/, ''));
+              slide.addText(bullets.join('\n'), { x: 0.5, y: 1.5, w: '90%', h: 4, fontSize: 18, bullet: true, color: '666666' });
+            }
+          }
+        });
+        await pptx.writeFile({ fileName: `${topic.replace(/[^a-z0-9]/gi, '_')}.pptx` });
+      } else if (type === 'excel') {
+        const rows = content.split('\n').filter(r => r.trim()).map(r => r.split(',').map(c => c.trim()));
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data");
+        XLSX.writeFile(wb, `${topic.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
+      }
+    } catch (e) {
+      console.error('Doc gen error:', e);
+    }
+  };
   
   // Speech Recognition Setup
   const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -346,7 +421,30 @@ export default function App() {
 
     // Dynamic System Instruction with Timezone and Local Time
     const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}\n\n[SYSTEM INFO]\nThe current date and time is: ${new Date().toLocaleString()}, in the timezone: ${userTimeZone}. Use this to accurately calculate global times if asked.`;
+    let dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}\n\n[SYSTEM INFO]\nThe current date and time is: ${new Date().toLocaleString()}, in the timezone: ${userTimeZone}. Use this to accurately calculate global times if asked.`;
+
+    let isDocGen = false;
+    let docType = '';
+    let docTopic = '';
+
+    const lowerInput = userInput.toLowerCase();
+    if (lowerInput.startsWith('create a word doc about ')) {
+      isDocGen = true; docType = 'word'; docTopic = userInput.substring(24).trim();
+    } else if (lowerInput.startsWith('create a powerpoint about ')) {
+      isDocGen = true; docType = 'ppt'; docTopic = userInput.substring(26).trim();
+    } else if (lowerInput.startsWith('create an excel sheet about ')) {
+      isDocGen = true; docType = 'excel'; docTopic = userInput.substring(28).trim();
+    }
+
+    if (isDocGen) {
+      if (docType === 'word') {
+         dynamicSystemInstruction += `\n\nThe user requested a Word document about "${docTopic}". Please provide ONLY the raw content for the document. No markdown blocks wrapping the text. Include a title, introduction, 3-5 main sections, and a conclusion.`;
+      } else if (docType === 'ppt') {
+         dynamicSystemInstruction += `\n\nThe user requested a PowerPoint presentation about "${docTopic}". Please provide the content in strict format. Separate slides with "---SLIDE---". For each slide, put the title on the first line, and bullet points on following lines. No markdown blocks.`;
+      } else if (docType === 'excel') {
+         dynamicSystemInstruction += `\n\nThe user requested an Excel sheet about "${docTopic}". Please provide ONLY a valid CSV format table. No markdown tables or code blocks. The first row must be headers, followed by data rows.`;
+      }
+    }
 
     let modelIndex = 0;
     let success = false;
@@ -371,6 +469,12 @@ export default function App() {
         let fullText = '';
 
         if (currentModel.type === 'gemini') {
+          // Map past messages for persistent memory
+          const pastContents: any[] = messages.filter(m => !m.isStreaming && m.type === 'text').map(m => ({
+             role: m.role === 'user' ? 'user' : 'model',
+             parts: [{ text: m.content }]
+          }));
+
           const parts: any[] = [{ text: userInput || "Analyze the following." }];
 
           currentFiles.forEach(file => {
@@ -386,9 +490,6 @@ export default function App() {
             }
           });
 
-          // Define tools for Gemini (enable google search grounding)
-          // Some environments/model versions might throw if tools is passed but unsupported,
-          // however gemini-flash and pro 1.5/2.0 normally support it
           const config: any = {
             systemInstruction: dynamicSystemInstruction,
             tools: [{ googleSearch: {} }]
@@ -396,7 +497,7 @@ export default function App() {
 
           const responseStream = await ai.models.generateContentStream({
             model: currentModel.id,
-            contents: [{ role: 'user', parts }],
+            contents: [...pastContents, { role: 'user', parts }],
             config: config
           });
 
@@ -410,7 +511,7 @@ export default function App() {
               ));
             }
           }
-        } else {
+        } else if (currentModel.type === 'mistral') {
           // Mistral AI
           const systemMsg = dynamicSystemInstruction;
 
@@ -432,14 +533,18 @@ export default function App() {
             alert('Warning: PPTX extraction is currently not fully supported by this model. To analyze PPTX thoroughly, please select a Gemini model, or convert to PDF/Text first.');
           }
 
-          const messages: any[] = [
+          const mistralMessages: any[] = [
             { role: 'system', content: systemMsg },
+            ...messages.filter(m => !m.isStreaming && m.type === 'text').map(m => ({
+               role: m.role === 'user' ? 'user' : 'assistant',
+               content: m.content
+            })),
             { role: 'user', content: contentParts.length > 1 ? contentParts : (userInput || "Hello!") }
           ];
 
           const responseStream = await mistral.chat.stream({
             model: currentModel.id,
-            messages: messages,
+            messages: mistralMessages,
           });
 
           setIsThinking(false);
@@ -452,11 +557,72 @@ export default function App() {
               ));
             }
           }
+        } else if (currentModel.type === 'groq') {
+           const groqMessages: any[] = [
+             { role: 'system', content: dynamicSystemInstruction },
+             ...messages.filter(m => !m.isStreaming && m.type === 'text').map(m => ({
+                role: m.role === 'user' ? 'user' : 'assistant',
+                content: m.content
+             })),
+             { role: 'user', content: userInput || "Hello!" }
+           ];
+           
+           const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                 'Authorization': `Bearer ${getGroqKey()}`,
+                 'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                 model: currentModel.id,
+                 messages: groqMessages,
+                 stream: true
+              })
+           });
+
+           if (!response.ok) {
+              throw new Error(`Groq error: ${response.status} ${response.statusText}`);
+           }
+
+           // Handle SSE streaming for Groq
+           setIsThinking(false);
+           const reader = response.body?.getReader();
+           const decoder = new TextDecoder("utf-8");
+           if (reader) {
+              while (true) {
+                 const { done, value } = await reader.read();
+                 if (done) break;
+                 const chunk = decoder.decode(value);
+                 const lines = chunk.split('\n').filter(line => line.trim() !== '' && line.trim() !== 'data: [DONE]');
+                 for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                       try {
+                          const data = JSON.parse(line.substring(6));
+                          const delta = data.choices[0].delta.content;
+                          if (delta) {
+                             fullText += delta;
+                             setMessages(prev => prev.map(msg =>
+                                msg.id === aiMessageId ? { ...msg, content: fullText } : msg
+                             ));
+                          }
+                       } catch (e) {}
+                    }
+                 }
+              }
+           }
         }
 
-        setMessages(prev => prev.map(msg =>
-          msg.id === aiMessageId ? { ...msg, isStreaming: false } : msg
-        ));
+        if (isDocGen) {
+           await handleDocumentGeneration(docType, docTopic, fullText);
+           // Rewrite aiMessage content to replace raw document string
+           setMessages(prev => prev.map(msg =>
+              msg.id === aiMessageId ? { ...msg, content: `✅ I've created the ${docType.toUpperCase()} file about "${docTopic}". It should download automatically!`, isStreaming: false } : msg
+           ));
+        } else {
+           setMessages(prev => prev.map(msg =>
+             msg.id === aiMessageId ? { ...msg, isStreaming: false } : msg
+           ));
+        }
         success = true;
       } catch (error: any) {
         console.error(`Error with model ${currentModel.id}:`, error);
@@ -719,6 +885,24 @@ export default function App() {
             >
               <Paperclip size={22} />
             </button>
+            <div className="relative" ref={createMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+                className="p-3 text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"
+                title="Create Document"
+              >
+                <Plus size={22} />
+              </button>
+              {isCreateMenuOpen && (
+                <div className="absolute bottom-full left-0 mb-2 w-48 bg-[var(--bg-primary)] border border-[var(--bg-secondary)] rounded-xl shadow-2xl py-2 z-50">
+                   <button type="button" onClick={() => { setInput("Create a Word doc about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><FileText size={16} className="inline mr-2"/> Word Document</button>
+                   <button type="button" onClick={() => { setInput("Create a PowerPoint about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Presentation size={16} className="inline mr-2"/> PowerPoint Slide</button>
+                   <button type="button" onClick={() => { setInput("Create an Excel sheet about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Table size={16} className="inline mr-2"/> Excel Sheet</button>
+                   <button type="button" onClick={() => { setInput("Create a quiz about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Brain size={16} className="inline mr-2"/> Quiz / Flashcards</button>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={toggleListening}
