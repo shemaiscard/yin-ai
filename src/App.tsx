@@ -264,6 +264,23 @@ export default function App() {
     } else {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Attempt to load higher quality, more human voices if supported by the browser/OS
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoices = voices.filter(v => 
+        (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Premium') || v.name.includes('Microsoft')) && 
+        v.lang.startsWith('en')
+      );
+      
+      if (preferredVoices.length > 0) {
+        // Try to favor the UK Google voice or Microsoft Azure Natural voices giving a much more human inflection
+        const bestVoice = preferredVoices.find(v => v.name.includes('UK English Female') || v.name.includes('Aria') || v.name.includes('Natural')) || preferredVoices[0];
+        utterance.voice = bestVoice;
+      }
+
+      utterance.pitch = 1.05; // Make voice slightly more energetic
+      utterance.rate = 1.05;  // Speech pacing
+
       utterance.onend = () => setPlayingMessageId(null);
       utterance.onerror = () => setPlayingMessageId(null);
       setPlayingMessageId(messageId);
