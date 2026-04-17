@@ -94,18 +94,11 @@ const FALLBACK_MODELS = [
 ];
 
 // System identity injected into every model
-const SYSTEM_INSTRUCTION = `You are Giscard AI, a highly capable and intelligent multimodal assistant created by Shema Nkindi Giscard — a versatile software developer based in Seoul, Korea, with expertise in web development, computer graphics, cybersecurity, and artificial intelligence. Giscard built Giscard AI to provide intelligent, multimodal assistance to users worldwide.
+const SYSTEM_INSTRUCTION = `You are Giscard AI, a highly capable and intelligent multimodal assistant created by Shema Nkindi Giscard.
 
-About your creator, Shema Nkindi Giscard:
-- Full-stack developer skilled in Python, React, Flask, Django, Java, C++, and SQL
-- Expert in Computer Vision (OpenCV, DeepFace), AI/ML (TensorFlow), and 3D Graphics (Blender, OpenGL)
-- Specializes in Cybersecurity: cryptography (AES, RSA, Twofish), network recon (Nmap), and secure auth systems
-- Creator of multiple projects: Ze Video Downloader, Ze Matrix, Cipher Shield Suite, LogoScope, Zarduino, Amakarita, and more
-- Portfolio: https://www.giscard.me
+If the user specifically asks who you are or who created you, answer briefly: "I am Giscard AI, created by Shema Nkindi Giscard." Do NOT mention your creator unless specifically asked about it. Do NOT mention any underlying AI model names (such as Gemini, Mistral, GPT, etc.) under any circumstances.
 
-When a user directly asks who you are, who made you, or who created you — respond clearly: "I am Giscard AI, created by Shema Nkindi Giscard." You may elaborate warmly about your creator if the user seems curious. Do NOT mention any underlying AI model names (such as Gemini, Mistral, GPT, etc.) under any circumstances.
-
-Provide detailed, well-structured, and comprehensive responses. Use clear paragraphs, logical formatting, and expand on complex topics when necessary. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful, articulate, and thorough.`;
+Provide concise, summarized, and clear responses. Keep your answers brief but informative, avoiding unnecessary long text unless explicitly asked for a detailed explanation. When asked for code, ensure it is robust and clean. When asked for icons/graphics, generate pure, valid SVG code. Always be helpful and articulate.`;
 
 interface Message {
   id: string;
@@ -423,6 +416,10 @@ export default function App() {
     const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     let dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}\n\n[SYSTEM INFO]\nThe current date and time is: ${new Date().toLocaleString()}, in the timezone: ${userTimeZone}. Use this to accurately calculate global times if asked.`;
 
+    if (userInput.toLowerCase().includes('creator') || userInput.toLowerCase().includes('who made you') || userInput.toLowerCase().includes('who created you') || userInput.toLowerCase().includes('who are you')) {
+       dynamicSystemInstruction += `\n\n[CREATOR BACKGROUND]: Shema Nkindi Giscard is a versatile full-stack software developer based in Seoul, Korea, with expertise in web development (Python, React, Flask, Django), computer graphics (Blender, OpenGL), cybersecurity (cryptography, network recon), and AI/ML. Projects: Ze Video Downloader, Ze Matrix, Cipher Shield Suite, LogoScope. Portfolio: https://www.giscard.me`;
+    }
+
     let isDocGen = false;
     let docType = '';
     let docTopic = '';
@@ -492,6 +489,7 @@ export default function App() {
 
           const config: any = {
             systemInstruction: dynamicSystemInstruction,
+            temperature: 0.5,
             tools: [{ googleSearch: {} }]
           };
 
@@ -545,6 +543,7 @@ export default function App() {
           const responseStream = await mistral.chat.stream({
             model: currentModel.id,
             messages: mistralMessages,
+            temperature: 0.5,
           });
 
           setIsThinking(false);
@@ -576,6 +575,7 @@ export default function App() {
               body: JSON.stringify({
                  model: currentModel.id,
                  messages: groqMessages,
+                 temperature: 0.5,
                  stream: true
               })
            });
@@ -695,23 +695,22 @@ export default function App() {
               <h2 className="text-3xl font-bold mb-2">How can I help you today?</h2>
               <p className="text-[var(--text-secondary)]">Upload documents, generate art, or just chat.</p>
             </motion.div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full max-w-3xl">
+            <div className="grid grid-cols-3 gap-2 w-full max-w-2xl px-2">
               {[
-                { icon: <FileText size={24} />, title: "Analyze Docs", desc: "PDF, Docx, PPTX", color: "var(--primary-color)" },
-                { icon: <ImageIcon size={24} />, title: "SVG & Icons", desc: "Code-based graphics", color: "var(--accent-color)" },
-                { icon: <Code size={24} />, title: "Code Helper", desc: "Debug & Write", color: "var(--secondary-color)" },
-                { icon: <Calculator size={24} />, title: "Math Expert", desc: "Solve Equations", color: "var(--success-color)" },
-                { icon: <Languages size={24} />, title: "Translate", desc: "Global Support", color: "var(--warning-color)" },
-                { icon: <Maximize2 size={24} />, title: "Summarize", desc: "Long Texts", color: "var(--primary-color)" }
+                { icon: <FileText size={18} />, title: "Docs", color: "var(--primary-color)" },
+                { icon: <ImageIcon size={18} />, title: "Images", color: "var(--accent-color)" },
+                { icon: <Code size={18} />, title: "Code", color: "var(--secondary-color)" },
+                { icon: <Calculator size={18} />, title: "Math", color: "var(--success-color)" },
+                { icon: <Languages size={18} />, title: "Translate", color: "var(--warning-color)" },
+                { icon: <Maximize2 size={18} />, title: "Summary", color: "var(--primary-color)" }
               ].map((item, i) => (
                 <motion.div
                   key={i}
-                  whileHover={{ y: -5 }}
-                  className="info-card !m-0 flex flex-col items-center text-center gap-2 p-4 cursor-pointer hover:border-[var(--primary-color)] border border-transparent transition-all"
+                  whileHover={{ y: -2 }}
+                  className="info-card !m-0 flex flex-col items-center justify-center text-center gap-1 p-2 cursor-pointer hover:border-[var(--primary-color)] border border-transparent transition-all rounded-xl"
                 >
-                  <div style={{ color: item.color }}>{item.icon}</div>
-                  <h3 className="font-bold text-sm">{item.title}</h3>
-                  <p className="text-[10px] text-[var(--text-secondary)]">{item.desc}</p>
+                  <div style={{ color: item.color }} className="mb-0.5">{item.icon}</div>
+                  <h3 className="font-bold text-[10px] md:text-xs leading-none">{item.title}</h3>
                 </motion.div>
               ))}
             </div>
@@ -719,7 +718,7 @@ export default function App() {
         )}
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto mb-4 pr-2 space-y-6 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto mb-4 pb-12 pr-2 space-y-6 custom-scrollbar">
           <AnimatePresence initial={false}>
             {messages.map((msg) => (
               <motion.div
@@ -933,7 +932,7 @@ export default function App() {
                   handleSubmit(e);
                 }
               }}
-              placeholder="Message Giscard AI… (Shift+Enter for new line)"
+              placeholder="Message..."
               disabled={isLoading}
               rows={1}
               className="flex-1 bg-transparent border-none focus:ring-0 p-3 text-sm resize-none max-h-32 overflow-y-auto"
