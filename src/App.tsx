@@ -485,17 +485,20 @@ export default function App() {
 
         if (currentModel.type === 'gemini') {
           // Map past messages for persistent memory, including summaries of past files for context
-          const pastContents: any[] = messages.map(m => {
-             let content = m.content;
-             if (m.type === 'file' && m.files) {
-                const fileList = m.files.map(f => f.name).join(', ');
-                content = `[Attached Files: ${fileList}]\n${m.content}`;
-             }
-             return {
-                role: m.role === 'user' ? 'user' : 'model',
-                parts: [{ text: content }]
-             };
-          });
+          // Filter out the current user message (last one) to avoid redundancy and 400 errors
+          const pastContents: any[] = messages
+            .filter(m => !m.isStreaming)
+            .map(m => {
+               let content = m.content;
+               if (m.type === 'file' && m.files) {
+                  const fileList = m.files.map(f => f.name).join(', ');
+                  content = `[Attached Files: ${fileList}]\n${m.content}`;
+               }
+               return {
+                  role: m.role === 'user' ? 'user' : 'model',
+                  parts: [{ text: content }]
+               };
+            });
 
           const parts: any[] = [{ text: userInput || "Analyze the following." }];
 
@@ -513,8 +516,7 @@ export default function App() {
           });
 
           const config: any = {
-            temperature: 0.5,
-            tools: [{ googleSearch: {} }]
+            temperature: 0.5
           };
 
           const responseStream = await ai.models.generateContentStream({
@@ -588,6 +590,7 @@ export default function App() {
               ));
             }
           }
+        } else if (currentModel.type === 'groq') {
            let contextPrompt = userInput || "Analyze the following content.";
            
            // Append extracted text or file descriptions for Groq (which is text-only usually)
@@ -681,9 +684,10 @@ export default function App() {
 
         const isQuotaError = error?.message?.includes('quota') || error?.message?.includes('429') || error?.status === 'RESOURCE_EXHAUSTED' || error?.status === 429;
 
-        if (isQuotaError && modelIndex < FALLBACK_MODELS.length - 1) {
+        // Robust fallback: Try the next model for ANY error before giving up
+        if (modelIndex < FALLBACK_MODELS.length - 1) {
           modelIndex++;
-          console.log(`Switching to next model: ${FALLBACK_MODELS[modelIndex].id}`);
+          console.log(`Fallback: Switching to next model ${FALLBACK_MODELS[modelIndex].id} due to error in ${currentModel.id}`);
           continue;
         }
 
