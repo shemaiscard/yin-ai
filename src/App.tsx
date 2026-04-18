@@ -86,10 +86,10 @@ const getGroqKey = () => {
 
 // Array of fallback models in strict priority order invisible to user
 const FALLBACK_MODELS = [
-  { id: 'gemini-3-flash-preview', type: 'gemini', provider: 'google' },
+  { id: 'gemini-2.0-flash', type: 'gemini', provider: 'google' },
   { id: 'llama-3.3-70b-versatile', type: 'groq', provider: 'groq' },
-  { id: 'gemini-3.1-flash-lite-preview', type: 'gemini', provider: 'google' },
-  { id: 'gemini-flash-latest', type: 'gemini', provider: 'google' },
+  { id: 'gemini-1.5-flash', type: 'gemini', provider: 'google' },
+  { id: 'gemini-1.5-pro', type: 'gemini', provider: 'google' },
   { id: 'mistral-small-latest', type: 'mistral', provider: 'mistral' }
 ];
 
@@ -402,7 +402,8 @@ export default function App() {
     }
 
     setAttachedFiles(prev => [...prev, ...newFiles]);
-    setFileProgress(null);
+    // Ensure progress bar is visible for at least a moment
+    setTimeout(() => setFileProgress(null), 800);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -410,9 +411,9 @@ export default function App() {
     if (!userInput.trim() && attachedFiles.length === 0) return;
     setIsLoading(true);
 
-    // Simulate "Upload to AI" progress
+    // Simulate "Upload to AI" progress with a guaranteed minimum visibility
     setIsUploadingToAI(true);
-    await new Promise(resolve => setTimeout(resolve, 800)); // Brief simulated wait or processing time
+    await new Promise(resolve => setTimeout(resolve, 1200)); 
     setIsUploadingToAI(false);
 
     const currentFiles = [...attachedFiles];
@@ -573,14 +574,27 @@ export default function App() {
               ));
             }
           }
-        } else if (currentModel.type === 'groq') {
+           let contextPrompt = userInput || "Analyze the following content.";
+           
+           // Append extracted text or file descriptions for Groq (which is text-only usually)
+           if (currentFiles.length > 0) {
+              contextPrompt += "\n\n[ATTACHED FILES CONTENT]";
+              currentFiles.forEach(file => {
+                 if (file.extractedText) {
+                    contextPrompt += `\n--- File: ${file.name} ---\n${file.extractedText}\n`;
+                 } else {
+                    contextPrompt += `\n--- File: ${file.name} (Binary/Image) ---\n[This is an image or binary file named ${file.name}. Please describe your general knowledge of this file type if applicable.]\n`;
+                 }
+              });
+           }
+
            const groqMessages: any[] = [
              { role: 'system', content: dynamicSystemInstruction },
              ...messages.filter(m => !m.isStreaming && m.type === 'text').map(m => ({
                 role: m.role === 'user' ? 'user' : 'assistant',
                 content: m.content
              })),
-             { role: 'user', content: userInput || "Hello!" }
+             { role: 'user', content: contextPrompt }
            ];
            
            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
