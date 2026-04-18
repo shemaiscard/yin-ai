@@ -86,10 +86,10 @@ const getGroqKey = () => {
 
 // Array of fallback models in strict priority order invisible to user
 const FALLBACK_MODELS = [
-  { id: 'gemini-2.0-flash', type: 'gemini', provider: 'google' },
-  { id: 'llama-3.3-70b-versatile', type: 'groq', provider: 'groq' },
   { id: 'gemini-1.5-flash', type: 'gemini', provider: 'google' },
+  { id: 'gemini-2.0-flash', type: 'gemini', provider: 'google' },
   { id: 'gemini-1.5-pro', type: 'gemini', provider: 'google' },
+  { id: 'llama-3.3-70b-versatile', type: 'groq', provider: 'groq' },
   { id: 'mistral-small-latest', type: 'mistral', provider: 'mistral' }
 ];
 
@@ -484,11 +484,18 @@ export default function App() {
         let fullText = '';
 
         if (currentModel.type === 'gemini') {
-          // Map past messages for persistent memory
-          const pastContents: any[] = messages.filter(m => !m.isStreaming && m.type === 'text').map(m => ({
-             role: m.role === 'user' ? 'user' : 'model',
-             parts: [{ text: m.content }]
-          }));
+          // Map past messages for persistent memory, including summaries of past files for context
+          const pastContents: any[] = messages.map(m => {
+             let content = m.content;
+             if (m.type === 'file' && m.files) {
+                const fileList = m.files.map(f => f.name).join(', ');
+                content = `[Attached Files: ${fileList}]\n${m.content}`;
+             }
+             return {
+                role: m.role === 'user' ? 'user' : 'model',
+                parts: [{ text: content }]
+             };
+          });
 
           const parts: any[] = [{ text: userInput || "Analyze the following." }];
 
@@ -506,13 +513,13 @@ export default function App() {
           });
 
           const config: any = {
-            systemInstruction: dynamicSystemInstruction,
             temperature: 0.5,
             tools: [{ googleSearch: {} }]
           };
 
           const responseStream = await ai.models.generateContentStream({
             model: currentModel.id,
+            systemInstruction: dynamicSystemInstruction,
             contents: [...pastContents, { role: 'user', parts }],
             config: config
           });
@@ -551,10 +558,17 @@ export default function App() {
 
           const mistralMessages: any[] = [
             { role: 'system', content: systemMsg },
-            ...messages.filter(m => !m.isStreaming && m.type === 'text').map(m => ({
-               role: m.role === 'user' ? 'user' : 'assistant',
-               content: m.content
-            })),
+            ...messages.map(m => {
+               let content = m.content;
+               if (m.type === 'file' && m.files) {
+                  const fileList = m.files.map(f => f.name).join(', ');
+                  content = `[Attached Files: ${fileList}]\n${m.content}`;
+               }
+               return {
+                  role: m.role === 'user' ? 'user' : 'assistant',
+                  content: content
+               };
+            }),
             { role: 'user', content: contentParts.length > 1 ? contentParts : (userInput || "Hello!") }
           ];
 
@@ -590,10 +604,17 @@ export default function App() {
 
            const groqMessages: any[] = [
              { role: 'system', content: dynamicSystemInstruction },
-             ...messages.filter(m => !m.isStreaming && m.type === 'text').map(m => ({
-                role: m.role === 'user' ? 'user' : 'assistant',
-                content: m.content
-             })),
+             ...messages.map(m => {
+                let content = m.content;
+                if (m.type === 'file' && m.files) {
+                   const fileList = m.files.map(f => f.name).join(', ');
+                   content = `[Attached Files: ${fileList}]\n${m.content}`;
+                }
+                return {
+                   role: m.role === 'user' ? 'user' : 'assistant',
+                   content: content
+                };
+             }),
              { role: 'user', content: contextPrompt }
            ];
            
