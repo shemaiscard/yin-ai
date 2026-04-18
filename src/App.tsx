@@ -516,12 +516,12 @@ export default function App() {
           });
 
           const config: any = {
+            systemInstruction: dynamicSystemInstruction,
             temperature: 0.5
           };
 
           const responseStream = await ai.models.generateContentStream({
             model: currentModel.id,
-            systemInstruction: dynamicSystemInstruction,
             contents: [...pastContents, { role: 'user', parts }],
             config: config
           });
