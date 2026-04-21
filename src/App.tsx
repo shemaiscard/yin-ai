@@ -12,6 +12,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import localforage from 'localforage';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
+  Send,
   Bot,
   User,
   Loader2,
