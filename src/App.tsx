@@ -10,7 +10,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import localforage from 'localforage';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   Bot,
   User,
@@ -62,7 +62,7 @@ const getGeminiKey = () => {
 };
 
 // Only initialize if key exists to prevent crashing if user hasn't set it yet
-const ai = getGeminiKey() ? new GoogleGenAI({ apiKey: getGeminiKey() }) : null;
+const ai = getGeminiKey() ? new GoogleGenerativeAI(getGeminiKey()) : null;
 
 // Initialize Groq Key
 const getGroqKey = () => {
@@ -590,19 +590,17 @@ export default function App() {
              }
           });
 
-          const responseStream = await ai.models.generateContentStream({
-             model: currentModel.id,
+          const model = ai.getGenerativeModel({ model: currentModel.id, tools: [{ googleSearch: {} }] });
+          const responseStream = await model.generateContentStream({
              contents: [...geminiHistory, { role: 'user', parts: currentParts }],
-             config: {
-                systemInstruction: dynamicSystemInstruction,
-                temperature: 0.5,
-                tools: [{ googleSearch: {} }] // Enable live internet search
-             }
+             systemInstruction: dynamicSystemInstruction,
+             generationConfig: { temperature: 0.5 }
           });
 
-          for await (const chunk of responseStream) {
-             if (chunk.text) {
-                fullText += chunk.text;
+          for await (const chunk of responseStream.stream) {
+             const chunkText = chunk.text();
+             if (chunkText) {
+                fullText += chunkText;
                 setMessages(prev => prev.map(msg =>
                    msg.id === aiMessageId ? { ...msg, content: fullText } : msg
                 ));
