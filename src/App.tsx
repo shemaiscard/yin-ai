@@ -174,10 +174,19 @@ export default function App() {
         const doc = new Document({
           sections: [{
             properties: {},
-            children: content.split('\n').filter(p => p.trim()).map(p => new Paragraph({
-              children: [new TextRun(p)],
-              spacing: { after: 200 }
-            }))
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: topic.toUpperCase(), bold: true, size: 36, font: "Calibri", color: "1f497d" })
+                ],
+                spacing: { after: 400 },
+                heading: "Heading1"
+              }),
+              ...content.split('\n').filter(p => p.trim()).map(p => new Paragraph({
+                children: [new TextRun({ text: p, size: 24, font: "Calibri" })],
+                spacing: { after: 200 }
+              }))
+            ]
           }]
         });
         const blob = await Packer.toBlob(doc);
@@ -282,6 +291,24 @@ export default function App() {
       utterance.onerror = () => setPlayingMessageId(null);
       setPlayingMessageId(messageId);
       window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleImageDownload = async (url: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `giscard-ai-image-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      window.open(url, '_blank');
     }
   };
 
@@ -788,7 +815,7 @@ export default function App() {
                   {msg.type === 'image' ? (
                     <div className="group relative w-full flex justify-center">
                       <img src={msg.content} alt="AI Generated" className="rounded-xl max-w-full h-auto max-h-[50vh] object-contain shadow-lg transition-transform hover:scale-[1.02]" referrerPolicy="no-referrer" />
-                      <button className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Download size={14} /></button>
+                      <button onClick={(e) => handleImageDownload(msg.content, e)} className="absolute top-2 right-2 p-2.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-[var(--primary-color)] hover:shadow-[0_0_15px_var(--primary-color)]"><Download size={14} /></button>
                     </div>
                   ) : msg.type === 'file' ? (
                     <div className="flex flex-col gap-2">
@@ -815,23 +842,37 @@ export default function App() {
                      </div>
                   ) : (
                     <div className="prose dark:prose-invert max-w-none leading-relaxed text-sm md:text-base">
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code({ node, inline, className, children, ...props }: any) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return !inline && match ? (
-                              <CodeBlock language={match[1]} {...props}>{String(children).replace(/\n$/, '')}</CodeBlock>
-                            ) : (
-                              <code className="bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded text-[var(--accent-color)] font-mono text-[13px]" {...props}>
-                                {children}
-                              </code>
-                            );
-                          }
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
+                      {msg.content ? (
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code({ node, inline, className, children, ...props }: any) {
+                                const match = /language-(\w+)/.exec(className || '');
+                                return !inline && match ? (
+                                  <CodeBlock language={match[1]} {...props}>{String(children).replace(/\n$/, '')}</CodeBlock>
+                                ) : (
+                                  <code className="bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded text-[var(--accent-color)] font-mono text-[13px]" {...props}>
+                                    {children}
+                                  </code>
+                                );
+                              }
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                      ) : msg.isStreaming ? (
+                          <div className="flex items-center gap-3">
+                             <BrainCircuit size={18} className="animate-pulse text-[var(--primary-color)]" />
+                             <div className="flex items-center gap-2">
+                               <div className="flex gap-1">
+                                 <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce" />
+                                 <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.2s]" />
+                                 <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.4s]" />
+                               </div>
+                               <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary-color)]">Giscard AI is thinking...</span>
+                             </div>
+                          </div>
+                      ) : null}
                     </div>
                   )}
                   <div className={`flex items-center justify-between mt-2 pt-2 border-t border-white/5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
@@ -852,31 +893,6 @@ export default function App() {
               </motion.div>
             ))}
           </AnimatePresence>
-          {isThinking && (
-            <div className="flex gap-3">
-              <div className="p-2.5 rounded-xl bg-[var(--bg-secondary)] text-[var(--primary-color)] h-fit shadow-sm">
-                <BrainCircuit size={18} className="animate-pulse" />
-              </div>
-              <div className="ai-message chat-message flex flex-col gap-2 border border-[var(--bg-secondary)] !bg-[var(--bg-secondary)]/50">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce" />
-                    <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.2s]" />
-                    <div className="w-1 h-1 bg-[var(--primary-color)] rounded-full animate-bounce [animation-delay:0.4s]" />
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary-color)]">Giscard AI is thinking...</span>
-                </div>
-                <div className="h-2 w-32 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ x: '-100%' }}
-                    animate={{ x: '100%' }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                    className="h-full w-1/2 bg-gradient-to-r from-transparent via-[var(--primary-color)] to-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -934,18 +950,18 @@ export default function App() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-3 text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"
+              className="p-2 md:p-3 text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"
             >
-              <Paperclip size={22} />
+              <Paperclip size={20} className="md:w-[22px] md:h-[22px]" />
             </button>
             <div className="relative" ref={createMenuRef}>
               <button
                 type="button"
                 onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
-                className="p-3 text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"
+                className="p-2 md:p-3 text-[var(--text-secondary)] hover:text-[var(--primary-color)] transition-colors"
                 title="Create Document"
               >
-                <Plus size={22} />
+                <Plus size={20} className="md:w-[22px] md:h-[22px]" />
               </button>
               {isCreateMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 w-48 bg-[var(--bg-primary)] border border-[var(--bg-secondary)] rounded-xl shadow-2xl py-2 z-50">
@@ -960,10 +976,10 @@ export default function App() {
             <button
               type="button"
               onClick={toggleListening}
-              className={`p-3 transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-[var(--text-secondary)] hover:text-[var(--primary-color)]'}`}
+              className={`p-2 md:p-3 transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-[var(--text-secondary)] hover:text-[var(--primary-color)]'}`}
               title="Dictate"
             >
-              {isListening ? <MicOff size={22} /> : <Mic size={22} />}
+              {isListening ? <MicOff size={20} className="md:w-[22px] md:h-[22px]" /> : <Mic size={20} className="md:w-[22px] md:h-[22px]" />}
             </button>
             <input
               type="file"
