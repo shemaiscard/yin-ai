@@ -86,8 +86,8 @@ const getOpenRouterKey = () => {
 // Array of fallback models in strict priority order
 const FALLBACK_MODELS = [
   { id: 'gemini-2.5-flash', type: 'gemini' },
-  { id: 'llama-3.3-70b-versatile', type: 'groq' },
-  { id: 'openrouter/free', type: 'openrouter' }
+  { id: 'openrouter/free', type: 'openrouter' },
+  { id: 'llama-3.3-70b-versatile', type: 'groq' }
 ];
 
 // System identity injected into every model
@@ -503,57 +503,32 @@ export default function App() {
 
     // Handle Image Generation via Pollinations.ai instantly
     if (isImageGen && imagePrompt.trim() !== '') {
-        setIsThinking(true);
-        const encodedPrompt = encodeURIComponent(imagePrompt + " highly detailed, masterpiece, 8k resolution, beautiful");
+        const encodedPrompt = encodeURIComponent(imagePrompt + " highly detailed, masterpiece");
         const seed = Math.floor(Math.random() * 1000000); // randomize
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&nologo=True&enhance=true&width=1024&height=1024`;
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&nologo=True&width=2048&height=2048`;
         
-        // Load the image behind the scenes before showing
-        const img = new Image();
-        img.src = imageUrl;
-        img.onload = () => {
-            setIsThinking(false);
-            setMessages(prev => prev.map(msg => 
-                msg.id === aiMessageId 
-                    ? { ...msg, type: 'image', content: imageUrl, isStreaming: false } 
-                    : msg
-            ));
-        };
-        img.onerror = () => {
-            setIsThinking(false);
-            setMessages(prev => prev.map(msg => 
-                msg.id === aiMessageId 
-                    ? { ...msg, type: 'text', content: "Failed to generate image. Try again.", isStreaming: false } 
-                    : msg
-            ));
-        };
+        // Immediately render the image box so the browser natively handles the visual loading spinner 
+        // and it stays anchored to current scroll, preventing layout shifts
+        setMessages(prev => prev.map(msg => 
+            msg.id === aiMessageId 
+                ? { ...msg, type: 'image', content: imageUrl, isStreaming: false } 
+                : msg
+        ));
+        
         return; // Skip LLM generation
     }
 
     // Handle Avatar Generation via DiceBear instantly
     if (isAvatarGen && avatarSeed.trim() !== '') {
-        setIsThinking(true);
         const encodedSeed = encodeURIComponent(avatarSeed);
         const avatarUrl = `https://api.dicebear.com/8.x/bottts/svg?seed=${encodedSeed}`;
         
-        const img = new Image();
-        img.src = avatarUrl;
-        img.onload = () => {
-            setIsThinking(false);
-            setMessages(prev => prev.map(msg => 
-                msg.id === aiMessageId 
-                    ? { ...msg, type: 'image', content: avatarUrl, isStreaming: false } 
-                    : msg
-            ));
-        };
-        img.onerror = () => {
-            setIsThinking(false);
-            setMessages(prev => prev.map(msg => 
-                msg.id === aiMessageId 
-                    ? { ...msg, type: 'text', content: "Failed to generate avatar. Try again.", isStreaming: false } 
-                    : msg
-            ));
-        };
+        setMessages(prev => prev.map(msg => 
+            msg.id === aiMessageId 
+                ? { ...msg, type: 'image', content: avatarUrl, isStreaming: false } 
+                : msg
+        ));
+        
         return; // Skip LLM generation
     }
 
