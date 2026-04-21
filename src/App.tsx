@@ -437,23 +437,37 @@ export default function App() {
       }
     }
 
-    // Check for image generation request
-    const isImageGen = lowerInput.startsWith('generate an image of ') || lowerInput.startsWith('create an image of ') || lowerInput.startsWith('draw a ') || lowerInput.startsWith('imagine ');
+    // Check for image generation request using robust regex
+    const imageMatch = lowerInput.match(/^(?:generate|create|make|draw|imagine|show me)(?: me)?(?: an?)?\s+(.*(?:image|picture|photo|drawing).*)/i) 
+                    || lowerInput.match(/^(?:generate|create|make|draw|imagine|show me)(?: me)?(?: an?)?\s+(.*)/i);
+    
+    let isImageGen = false;
     let imagePrompt = '';
-    if (isImageGen) {
-      if (lowerInput.startsWith('generate an image of ')) imagePrompt = userInput.substring(21);
-      else if (lowerInput.startsWith('create an image of ')) imagePrompt = userInput.substring(19);
-      else if (lowerInput.startsWith('draw a ')) imagePrompt = userInput.substring(7);
-      else if (lowerInput.startsWith('imagine ')) imagePrompt = userInput.substring(8);
+    
+    // If it mentions image/drawing/picture AND an action verb, or starts with draw/imagine
+    if ((lowerInput.includes('generate') || lowerInput.includes('create') || lowerInput.includes('draw') || lowerInput.includes('imagine')) && 
+        (lowerInput.includes('image') || lowerInput.includes('picture') || lowerInput.includes('photo') || lowerInput.startsWith('draw') || lowerInput.startsWith('imagine'))) {
+        
+        // Prevent avatar requests from being caught here
+        if (!lowerInput.includes('avatar')) {
+            isImageGen = true;
+            imagePrompt = lowerInput
+                .replace(/^(generate|create|make|draw|imagine|show me)(\s+me)?(\s+an?)?\s+/i, '')
+                .replace(/\b(image|picture|photo)s?\b/gi, '')
+                .trim() || userInput;
+        }
     }
 
     // Check for avatar generation request
-    const isAvatarGen = lowerInput.startsWith('create an avatar for ') || lowerInput.startsWith('generate an avatar for ') || lowerInput.startsWith('draw an avatar for ');
+    let isAvatarGen = false;
     let avatarSeed = '';
-    if (isAvatarGen) {
-      if (lowerInput.startsWith('create an avatar for ')) avatarSeed = userInput.substring(21);
-      else if (lowerInput.startsWith('generate an avatar for ')) avatarSeed = userInput.substring(23);
-      else if (lowerInput.startsWith('draw an avatar for ')) avatarSeed = userInput.substring(19);
+    if (lowerInput.includes('avatar') && (lowerInput.includes('create') || lowerInput.includes('generate') || lowerInput.includes('draw') || lowerInput.includes('make'))) {
+        isAvatarGen = true;
+        avatarSeed = lowerInput
+            .replace(/^(generate|create|make|draw|imagine|show me)(\s+me)?(\s+an?)?\s+/i, '')
+            .replace(/\bavatars?\b/gi, '')
+            .replace(/\bfor\b/gi, '')
+            .trim() || userInput;
     }
 
     let modelIndex = 0;
