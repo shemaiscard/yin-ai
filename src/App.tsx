@@ -314,7 +314,7 @@ export default function App() {
 
   // Load from localforage (allows unlimited images/docs per session storage)
   useEffect(() => {
-    localforage.getItem<string>('yin-ai-chat-history').then((saved) => {
+    localforage.getItem<string>('giscard-ai-chat-history').then((saved) => {
       if (saved) {
         try {
           const parsed: Message[] = JSON.parse(saved);
@@ -329,7 +329,7 @@ export default function App() {
   // Save to localforage
   useEffect(() => {
     if (messages.length > 0) {
-      localforage.setItem('yin-ai-chat-history', JSON.stringify(messages)).catch(console.error);
+      localforage.setItem('giscard-ai-chat-history', JSON.stringify(messages)).catch(console.error);
     }
   }, [messages]);
 
@@ -354,7 +354,7 @@ export default function App() {
 
   const clearChat = () => {
     setMessages([]);
-    localforage.removeItem('yin-ai-chat-history').catch(console.error);
+    localforage.removeItem('giscard-ai-chat-history').catch(console.error);
   };
 
   const downloadChat = () => {
@@ -372,7 +372,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `yin-ai-chat-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `giscard-ai-chat-${new Date().toISOString().split('T')[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
