@@ -9,9 +9,9 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-// Providers consolidated to OpenRouter
+import localforage from 'localforage';
+import { GoogleGenAI } from "@google/genai";
 import {
-  Send,
   Bot,
   User,
   Loader2,
@@ -52,6 +52,27 @@ import { Document, Packer, Paragraph, TextRun } from 'docx';
 import pptxgen from 'pptxgenjs';
 import * as XLSX from 'xlsx';
 
+// Initialize Gemini API
+const getGeminiKey = () => {
+  const key = (import.meta as any).env.VITE_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  if (!key || key === 'undefined') {
+    console.warn('Gemini API Key not found. Please set VITE_GEMINI_API_KEY.');
+  }
+  return key || '';
+};
+
+// Only initialize if key exists to prevent crashing if user hasn't set it yet
+const ai = getGeminiKey() ? new GoogleGenAI({ apiKey: getGeminiKey() }) : null;
+
+// Initialize Groq Key
+const getGroqKey = () => {
+  const key = (import.meta as any).env.VITE_GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
+  if (!key || key === 'undefined') {
+    console.warn('Groq API Key not found. Please set VITE_GROQ_API_KEY.');
+  }
+  return key || '';
+};
+
 // Initialize OpenRouter Key
 const getOpenRouterKey = () => {
   const key = (import.meta as any).env.VITE_OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY;
@@ -61,11 +82,10 @@ const getOpenRouterKey = () => {
   return key || '';
 };
 
-// Array of fallback models in strict priority order (Free Models)
+// Array of fallback models in strict priority order
 const FALLBACK_MODELS = [
-  { id: 'google/gemini-2.0-flash-lite-preview-02-05:free', type: 'openrouter' },
-  { id: 'google/gemini-1.5-flash:free', type: 'openrouter' },
-  { id: 'meta-llama/llama-3-8b-instruct:free', type: 'openrouter' },
+  { id: 'gemini-2.5-flash', type: 'gemini' },
+  { id: 'llama-3.3-70b-versatile', type: 'groq' },
   { id: 'openrouter/free', type: 'openrouter' }
 ];
 
@@ -264,32 +284,27 @@ export default function App() {
     }
   };
 
-  // Load from LocalStorage
+  // Load from localforage (allows unlimited images/docs per session storage)
   useEffect(() => {
-    const saved = localStorage.getItem('yin-ai-chat-history');
-    if (saved) {
-      try {
-        const parsed: Message[] = JSON.parse(saved);
-        setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
-      } catch (e) {
-        console.error('Failed to parse chat history', e);
+    localforage.getItem<string>('yin-ai-chat-history').then((saved) => {
+      if (saved) {
+        try {
+          const parsed: Message[] = JSON.parse(saved);
+          setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
+        } catch (e) {
+          console.error('Failed to parse chat history', e);
+        }
       }
-    }
+    }).catch(console.error);
   }, []);
 
-  // Save to LocalStorage
+  // Save to localforage
   useEffect(() => {
     if (messages.length > 0) {
-      // Strip potentially huge base64 data to avoid quota issues on normal text history
-      const safelySerialized = messages.map(msg => {
-         if (msg.type === 'file' && msg.files) {
-            return { ...msg }; // LocalStorage limit shouldn't be hit immediately, but if needed we can drop msg.files
-         }
-         return msg;
-      });
-      localStorage.setItem('yin-ai-chat-history', JSON.stringify(safelySerialized));
+      localforage.setItem('yin-ai-chat-history', JSON.stringify(messages)).catch(console.error);
     }
   }, [messages]);
+
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -311,7 +326,7 @@ export default function App() {
 
   const clearChat = () => {
     setMessages([]);
-    localStorage.removeItem('yin-ai-chat-history');
+    localforage.removeItem('yin-ai-chat-history').catch(console.error);
   };
 
   const downloadChat = () => {
@@ -488,9 +503,9 @@ export default function App() {
     // Handle Image Generation via Pollinations.ai instantly
     if (isImageGen && imagePrompt.trim() !== '') {
         setIsThinking(true);
-        const encodedPrompt = encodeURIComponent(imagePrompt);
+        const encodedPrompt = encodeURIComponent(imagePrompt + " highly detailed, masterpiece, 8k resolution, beautiful");
         const seed = Math.floor(Math.random() * 1000000); // randomize
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&nologo=True`;
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&nologo=True&enhance=true&width=1024&height=1024`;
         
         // Load the image behind the scenes before showing
         const img = new Image();
@@ -548,87 +563,136 @@ export default function App() {
         setIsThinking(true);
         let fullText = '';
 
-        // Prepare messages for OpenRouter (OpenAI compatible)
-        const openRouterMessages: any[] = [
-          { role: 'system', content: dynamicSystemInstruction },
-          ...messages.filter(m => !m.isStreaming).map(m => {
-             // Handle conversation memory
+        if (currentModel.type === 'gemini') {
+          if (!ai) throw new Error("Gemini API not initialized");
+          
+          const geminiHistory = messages.filter(m => !m.isStreaming).map(m => {
              let content = m.content;
              if (m.type === 'file' && m.files) {
                 const fileList = m.files.map(f => f.name).join(', ');
                 content = `[Attached Files: ${fileList}]\n${m.content}`;
              }
-             return {
-                role: m.role === 'user' ? 'user' : 'assistant',
-                content: content
-             };
-          })
-        ];
+             return { role: m.role === 'user' ? 'user' : 'model', parts: [{ text: content }] };
+          });
+          
+          const currentParts: any[] = [{ text: userInput || "Analyze the following." }];
+          
+          currentFiles.forEach(file => {
+             if (file.extractedText) {
+                currentParts.push({ text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
+             } else if (file.type.startsWith('image/')) {
+                currentParts.push({
+                   inlineData: {
+                      data: file.data, // raw base64 string
+                      mimeType: file.type
+                   }
+                });
+             }
+          });
 
-        // Current user message with multimodal support
-        const currentContent: any[] = [{ type: 'text', text: userInput || "Analyze the following." }];
-        
-        currentFiles.forEach(file => {
-          if (file.extractedText) {
-            currentContent.push({ type: 'text', text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
-          } else if (file.type.startsWith('image/')) {
-            currentContent.push({ 
-              type: 'image_url', 
-              image_url: { url: `data:${file.type};base64,${file.data}` } 
-            });
+          const responseStream = await ai.models.generateContentStream({
+             model: currentModel.id,
+             contents: [...geminiHistory, { role: 'user', parts: currentParts }],
+             config: {
+                systemInstruction: dynamicSystemInstruction,
+                temperature: 0.5,
+                tools: [{ googleSearch: {} }] // Enable live internet search
+             }
+          });
+
+          for await (const chunk of responseStream) {
+             if (chunk.text) {
+                fullText += chunk.text;
+                setMessages(prev => prev.map(msg =>
+                   msg.id === aiMessageId ? { ...msg, content: fullText } : msg
+                ));
+             }
           }
-        });
+        } else {
+          // Handle Groq and OpenRouter via OpenAI Compatible Fetch
+          const aiMessages: any[] = [
+            { role: 'system', content: dynamicSystemInstruction },
+            ...messages.filter(m => !m.isStreaming).map(m => {
+               let content = m.content;
+               if (m.type === 'file' && m.files) {
+                  const fileList = m.files.map(f => f.name).join(', ');
+                  content = `[Attached Files: ${fileList}]\n${m.content}`;
+               }
+               return { role: m.role === 'user' ? 'user' : 'assistant', content };
+            })
+          ];
 
-        openRouterMessages.push({ role: 'user', content: currentContent });
+          const currentContent: any[] = [{ type: 'text', text: userInput || "Analyze the following." }];
+          
+          currentFiles.forEach(file => {
+            if (file.extractedText) {
+              currentContent.push({ type: 'text', text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
+            } else if (file.type.startsWith('image/') && currentModel.type !== 'groq') {
+              // Groq versatile doesn't natively support image base64, OpenRouter does.
+              currentContent.push({ 
+                type: 'image_url', 
+                image_url: { url: `data:${file.type};base64,${file.data}` } 
+              });
+            }
+          });
 
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${getOpenRouterKey()}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://giscard.me',
-            'X-Title': 'Giscard AI',
-          },
-          body: JSON.stringify({
-            model: currentModel.id,
-            messages: openRouterMessages,
-            stream: true,
-            temperature: 0.5,
-          })
-        });
+          aiMessages.push({ role: 'user', content: currentContent });
 
-        if (!response.ok) {
-           const errData = await response.json().catch(() => ({}));
-           throw new Error(errData?.error?.message || `OpenRouter error: ${response.status}`);
-        }
-
-        setIsThinking(false);
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder("utf-8");
-        
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n').filter(line => line.trim() !== '');
-            
-            for (const line of lines) {
-              const dataText = line.replace('data: ', '').trim();
-              if (dataText === '[DONE]') break;
+          const endpoint = currentModel.type === 'groq' 
+              ? 'https://api.groq.com/openai/v1/chat/completions' 
+              : 'https://openrouter.ai/api/v1/chat/completions';
               
-              try {
-                const data = JSON.parse(dataText);
-                const delta = data.choices[0]?.delta?.content;
-                if (delta) {
-                  fullText += delta;
-                  setMessages(prev => prev.map(msg =>
-                    msg.id === aiMessageId ? { ...msg, content: fullText } : msg
-                  ));
+          const key = currentModel.type === 'groq' ? getGroqKey() : getOpenRouterKey();
+
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${key}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://giscard.me',
+              'X-Title': 'Giscard AI',
+            },
+            body: JSON.stringify({
+              model: currentModel.id,
+              messages: aiMessages,
+              stream: true,
+              temperature: 0.5,
+            })
+          });
+
+          if (!response.ok) {
+             const errData = await response.json().catch(() => ({}));
+             throw new Error(errData?.error?.message || `${currentModel.type} error: ${response.status}`);
+          }
+
+          setIsThinking(false);
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder("utf-8");
+          
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              const chunk = decoder.decode(value);
+              const lines = chunk.split('\n').filter(line => line.trim() !== '');
+              
+              for (const line of lines) {
+                const dataText = line.replace('data: ', '').trim();
+                if (dataText === '[DONE]') break;
+                
+                try {
+                  const data = JSON.parse(dataText);
+                  const delta = data.choices[0]?.delta?.content;
+                  if (delta) {
+                    fullText += delta;
+                    setMessages(prev => prev.map(msg =>
+                      msg.id === aiMessageId ? { ...msg, content: fullText } : msg
+                    ));
+                  }
+                } catch (e) {
+                  // Ignore partial JSON parse errors
                 }
-              } catch (e) {
-                // Ignore partial JSON parse errors
               }
             }
           }
@@ -748,8 +812,8 @@ export default function App() {
                 </div>
                 <div className={`chat-message shadow-sm ${msg.role === 'user' ? 'user-message !bg-gradient-to-br from-[var(--primary-color)] to-[var(--secondary-color)]' : 'ai-message border border-[var(--bg-secondary)]'}`}>
                   {msg.type === 'image' ? (
-                    <div className="group relative">
-                      <img src={msg.content} alt="AI Generated" className="rounded-lg max-w-full h-auto shadow-lg transition-transform hover:scale-[1.02]" referrerPolicy="no-referrer" />
+                    <div className="group relative w-full flex justify-center">
+                      <img src={msg.content} alt="AI Generated" className="rounded-xl max-w-full h-auto max-h-[50vh] object-contain shadow-lg transition-transform hover:scale-[1.02]" referrerPolicy="no-referrer" />
                       <button className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Download size={14} /></button>
                     </div>
                   ) : msg.type === 'file' ? (
@@ -911,10 +975,11 @@ export default function App() {
               </button>
               {isCreateMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 w-48 bg-[var(--bg-primary)] border border-[var(--bg-secondary)] rounded-xl shadow-2xl py-2 z-50">
-                   <button type="button" onClick={() => { setInput("Create a Word doc about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><FileText size={16} className="inline mr-2"/> Word Document</button>
-                   <button type="button" onClick={() => { setInput("Create a PowerPoint about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Presentation size={16} className="inline mr-2"/> PowerPoint Slide</button>
-                   <button type="button" onClick={() => { setInput("Create an Excel sheet about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Table size={16} className="inline mr-2"/> Excel Sheet</button>
-                   <button type="button" onClick={() => { setInput("Create a quiz about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Brain size={16} className="inline mr-2"/> Quiz / Flashcards</button>
+                   <button type="button" onClick={() => { setInput("Create a Word doc about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><FileText size={16} className="text-[var(--primary-color)]"/> Word Document</button>
+                   <button type="button" onClick={() => { setInput("Create a PowerPoint about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Presentation size={16} className="text-orange-500"/> PowerPoint Slide</button>
+                   <button type="button" onClick={() => { setInput("Create an Excel sheet about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Table size={16} className="text-green-500"/> Excel Sheet</button>
+                   <button type="button" onClick={() => { setInput("generate an image of "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><ImageIcon size={16} className="text-purple-500"/> Generate Image</button>
+                   <button type="button" onClick={() => { setInput("Create a quiz about "); setIsCreateMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-[var(--bg-secondary)] flex items-center gap-2 text-sm transition-colors cursor-pointer"><Brain size={16} className="text-pink-500"/> Quiz / Flashcards</button>
                 </div>
               )}
             </div>
