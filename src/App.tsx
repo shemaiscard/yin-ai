@@ -438,22 +438,29 @@ export default function App() {
     }
 
     // Check for image generation request
-    const isImageGen = lowerInput.startsWith('generate an image of ') || lowerInput.startsWith('create an image of ') || lowerInput.startsWith('draw a ') || lowerInput.startsWith('imagine ');
+    let isImageGen = false;
     let imagePrompt = '';
-    if (isImageGen) {
-      if (lowerInput.startsWith('generate an image of ')) imagePrompt = userInput.substring(21);
-      else if (lowerInput.startsWith('create an image of ')) imagePrompt = userInput.substring(19);
-      else if (lowerInput.startsWith('draw a ')) imagePrompt = userInput.substring(7);
-      else if (lowerInput.startsWith('imagine ')) imagePrompt = userInput.substring(8);
+    const imagePrefixes = ['generate an image of ', 'create an image of ', 'generate an image ', 'create an image ', 'draw a ', 'imagine '];
+    for (const prefix of imagePrefixes) {
+        if (lowerInput.startsWith(prefix)) {
+            isImageGen = true;
+            imagePrompt = userInput.substring(prefix.length).trim();
+            if (!imagePrompt) imagePrompt = 'a beautiful random landscape'; // Fallback if empty
+            break;
+        }
     }
 
     // Check for avatar generation request
-    const isAvatarGen = lowerInput.startsWith('create an avatar for ') || lowerInput.startsWith('generate an avatar for ') || lowerInput.startsWith('draw an avatar for ');
+    let isAvatarGen = false;
     let avatarSeed = '';
-    if (isAvatarGen) {
-      if (lowerInput.startsWith('create an avatar for ')) avatarSeed = userInput.substring(21);
-      else if (lowerInput.startsWith('generate an avatar for ')) avatarSeed = userInput.substring(23);
-      else if (lowerInput.startsWith('draw an avatar for ')) avatarSeed = userInput.substring(19);
+    const avatarPrefixes = ['create an avatar for ', 'generate an avatar for ', 'draw an avatar for ', 'create avatar ', 'generate avatar '];
+    for (const prefix of avatarPrefixes) {
+        if (lowerInput.startsWith(prefix)) {
+            isAvatarGen = true;
+            avatarSeed = userInput.substring(prefix.length).trim();
+            if (!avatarSeed) avatarSeed = 'random'; // Fallback if empty
+            break;
+        }
     }
 
     let modelIndex = 0;
