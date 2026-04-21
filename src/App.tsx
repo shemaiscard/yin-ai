@@ -9,8 +9,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from "@google/genai";
-import { Mistral } from '@mistralai/mistralai';
+// Providers consolidated to OpenRouter
 import {
   Send,
   Bot,
@@ -53,44 +52,21 @@ import { Document, Packer, Paragraph, TextRun } from 'docx';
 import pptxgen from 'pptxgenjs';
 import * as XLSX from 'xlsx';
 
-// Initialize Gemini API
-const getApiKey = () => {
-  const key = process.env.GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY;
+// Initialize OpenRouter Key
+const getOpenRouterKey = () => {
+  const key = (import.meta as any).env.VITE_OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY;
   if (!key || key === 'undefined') {
-    console.warn('Gemini API Key not found. Please set GEMINI_API_KEY or VITE_GEMINI_API_KEY.');
+    console.warn('OpenRouter API Key not found. Please set VITE_OPENROUTER_API_KEY.');
   }
   return key || '';
 };
 
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
-
-// Initialize Mistral API
-const getMistralKey = () => {
-  const key = process.env.MISTRAL_API_KEY || (import.meta as any).env.VITE_MISTRAL_API_KEY;
-  if (!key || key === 'undefined') {
-    console.warn('Mistral API Key not found. Please set MISTRAL_API_KEY or VITE_MISTRAL_API_KEY.');
-  }
-  return key || '';
-};
-
-const mistral = new Mistral({ apiKey: getMistralKey() });
-
-// Initialize Groq Key Parser
-const getGroqKey = () => {
-  const key = process.env.GROQ_API_KEY || (import.meta as any).env.VITE_GROQ_API_KEY;
-  if (!key || key === 'undefined') {
-    console.warn('Groq API Key not found. Please set GROQ_API_KEY or VITE_GROQ_API_KEY.');
-  }
-  return key || '';
-};
-
-// Array of fallback models in strict priority order invisible to user
+// Array of fallback models in strict priority order (Free Models)
 const FALLBACK_MODELS = [
-  { id: 'gemini-1.5-flash', type: 'gemini', provider: 'google' },
-  { id: 'gemini-2.0-flash', type: 'gemini', provider: 'google' },
-  { id: 'gemini-1.5-pro', type: 'gemini', provider: 'google' },
-  { id: 'llama-3.3-70b-versatile', type: 'groq', provider: 'groq' },
-  { id: 'mistral-small-latest', type: 'mistral', provider: 'mistral' }
+  { id: 'google/gemini-2.0-flash-exp:free', type: 'openrouter' },
+  { id: 'mistralai/pixtral-12b:free', type: 'openrouter' },
+  { id: 'meta-llama/llama-3.1-8b-instruct:free', type: 'openrouter' },
+  { id: 'qwen/qwen-2-72b-instruct:free', type: 'openrouter' }
 ];
 
 // System identity injected into every model
@@ -461,6 +437,25 @@ export default function App() {
       }
     }
 
+    // Check for image generation request
+    const isImageGen = lowerInput.startsWith('generate an image of ') || lowerInput.startsWith('create an image of ') || lowerInput.startsWith('draw a ') || lowerInput.startsWith('imagine ');
+    let imagePrompt = '';
+    if (isImageGen) {
+      if (lowerInput.startsWith('generate an image of ')) imagePrompt = userInput.substring(21);
+      else if (lowerInput.startsWith('create an image of ')) imagePrompt = userInput.substring(19);
+      else if (lowerInput.startsWith('draw a ')) imagePrompt = userInput.substring(7);
+      else if (lowerInput.startsWith('imagine ')) imagePrompt = userInput.substring(8);
+    }
+
+    // Check for avatar generation request
+    const isAvatarGen = lowerInput.startsWith('create an avatar for ') || lowerInput.startsWith('generate an avatar for ') || lowerInput.startsWith('draw an avatar for ');
+    let avatarSeed = '';
+    if (isAvatarGen) {
+      if (lowerInput.startsWith('create an avatar for ')) avatarSeed = userInput.substring(21);
+      else if (lowerInput.startsWith('generate an avatar for ')) avatarSeed = userInput.substring(23);
+      else if (lowerInput.startsWith('draw an avatar for ')) avatarSeed = userInput.substring(19);
+    }
+
     let modelIndex = 0;
     let success = false;
 
@@ -476,6 +471,62 @@ export default function App() {
     setMessages(prev => [...prev, initialAiMessage]);
     setIsLoading(false);
 
+    // Handle Image Generation via Pollinations.ai instantly
+    if (isImageGen && imagePrompt.trim() !== '') {
+        setIsThinking(true);
+        const encodedPrompt = encodeURIComponent(imagePrompt);
+        const seed = Math.floor(Math.random() * 1000000); // randomize
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&nologo=True`;
+        
+        // Load the image behind the scenes before showing
+        const img = new Image();
+        img.src = imageUrl;
+        img.onload = () => {
+            setIsThinking(false);
+            setMessages(prev => prev.map(msg => 
+                msg.id === aiMessageId 
+                    ? { ...msg, type: 'image', content: imageUrl, isStreaming: false } 
+                    : msg
+            ));
+        };
+        img.onerror = () => {
+            setIsThinking(false);
+            setMessages(prev => prev.map(msg => 
+                msg.id === aiMessageId 
+                    ? { ...msg, type: 'text', content: "Failed to generate image. Try again.", isStreaming: false } 
+                    : msg
+            ));
+        };
+        return; // Skip LLM generation
+    }
+
+    // Handle Avatar Generation via DiceBear instantly
+    if (isAvatarGen && avatarSeed.trim() !== '') {
+        setIsThinking(true);
+        const encodedSeed = encodeURIComponent(avatarSeed);
+        const avatarUrl = `https://api.dicebear.com/8.x/bottts/svg?seed=${encodedSeed}`;
+        
+        const img = new Image();
+        img.src = avatarUrl;
+        img.onload = () => {
+            setIsThinking(false);
+            setMessages(prev => prev.map(msg => 
+                msg.id === aiMessageId 
+                    ? { ...msg, type: 'image', content: avatarUrl, isStreaming: false } 
+                    : msg
+            ));
+        };
+        img.onerror = () => {
+            setIsThinking(false);
+            setMessages(prev => prev.map(msg => 
+                msg.id === aiMessageId 
+                    ? { ...msg, type: 'text', content: "Failed to generate avatar. Try again.", isStreaming: false } 
+                    : msg
+            ));
+        };
+        return; // Skip LLM generation
+    }
+
     while (modelIndex < FALLBACK_MODELS.length && !success) {
       const currentModel = FALLBACK_MODELS[modelIndex];
 
@@ -483,193 +534,94 @@ export default function App() {
         setIsThinking(true);
         let fullText = '';
 
-        if (currentModel.type === 'gemini') {
-          // Map past messages for persistent memory, including summaries of past files for context
-          // Filter out the current user message (last one) to avoid redundancy and 400 errors
-          const pastContents: any[] = messages
-            .filter(m => !m.isStreaming)
-            .map(m => {
-               let content = m.content;
-               if (m.type === 'file' && m.files) {
-                  const fileList = m.files.map(f => f.name).join(', ');
-                  content = `[Attached Files: ${fileList}]\n${m.content}`;
-               }
-               return {
-                  role: m.role === 'user' ? 'user' : 'model',
-                  parts: [{ text: content }]
-               };
+        // Prepare messages for OpenRouter (OpenAI compatible)
+        const openRouterMessages: any[] = [
+          { role: 'system', content: dynamicSystemInstruction },
+          ...messages.filter(m => !m.isStreaming).map(m => {
+             // Handle conversation memory
+             let content = m.content;
+             if (m.type === 'file' && m.files) {
+                const fileList = m.files.map(f => f.name).join(', ');
+                content = `[Attached Files: ${fileList}]\n${m.content}`;
+             }
+             return {
+                role: m.role === 'user' ? 'user' : 'assistant',
+                content: content
+             };
+          })
+        ];
+
+        // Current user message with multimodal support
+        const currentContent: any[] = [{ type: 'text', text: userInput || "Analyze the following." }];
+        
+        currentFiles.forEach(file => {
+          if (file.extractedText) {
+            currentContent.push({ type: 'text', text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
+          } else if (file.type.startsWith('image/')) {
+            currentContent.push({ 
+              type: 'image_url', 
+              image_url: { url: `data:${file.type};base64,${file.data}` } 
             });
-
-          const parts: any[] = [{ text: userInput || "Analyze the following." }];
-
-          currentFiles.forEach(file => {
-            if (file.extractedText) {
-              parts.push({ text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
-            } else {
-              parts.push({
-                inlineData: {
-                  data: file.data,
-                  mimeType: file.type || 'application/octet-stream'
-                }
-              });
-            }
-          });
-
-          const config: any = {
-            systemInstruction: dynamicSystemInstruction,
-            temperature: 0.5
-          };
-
-          const responseStream = await ai.models.generateContentStream({
-            model: currentModel.id,
-            contents: [...pastContents, { role: 'user', parts }],
-            config: config
-          });
-
-          setIsThinking(false);
-          for await (const chunk of responseStream) {
-            const chunkText = chunk.text;
-            if (chunkText) {
-              fullText += chunkText;
-              setMessages(prev => prev.map(msg =>
-                msg.id === aiMessageId ? { ...msg, content: fullText } : msg
-              ));
-            }
           }
-        } else if (currentModel.type === 'mistral') {
-          // Mistral AI
-          const systemMsg = dynamicSystemInstruction;
+        });
 
-          const contentParts: any[] = [{ type: 'text', text: userInput || "Analyze the following files." }];
+        openRouterMessages.push({ role: 'user', content: currentContent });
 
-          let hasPPTX = false;
-          currentFiles.forEach(file => {
-            if (file.name.endsWith('.pptx')) {
-              hasPPTX = true;
-            }
-            if (file.extractedText) {
-              contentParts.push({ type: 'text', text: `\n--- Document: ${file.name} ---\n${file.extractedText}\n--- End Document ---\n` });
-            } else if (file.type.startsWith('image/')) {
-              contentParts.push({ type: 'image_url', image_url: `data:${file.type};base64,${file.data}` });
-            }
-          });
-
-          if (hasPPTX && currentModel.type === 'mistral') {
-            alert('Warning: PPTX extraction is currently not fully supported by this model. To analyze PPTX thoroughly, please select a Gemini model, or convert to PDF/Text first.');
-          }
-
-          const mistralMessages: any[] = [
-            { role: 'system', content: systemMsg },
-            ...messages.map(m => {
-               let content = m.content;
-               if (m.type === 'file' && m.files) {
-                  const fileList = m.files.map(f => f.name).join(', ');
-                  content = `[Attached Files: ${fileList}]\n${m.content}`;
-               }
-               return {
-                  role: m.role === 'user' ? 'user' : 'assistant',
-                  content: content
-               };
-            }),
-            { role: 'user', content: contentParts.length > 1 ? contentParts : (userInput || "Hello!") }
-          ];
-
-          const responseStream = await mistral.chat.stream({
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${getOpenRouterKey()}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://giscard.me',
+            'X-Title': 'Giscard AI',
+          },
+          body: JSON.stringify({
             model: currentModel.id,
-            messages: mistralMessages,
+            messages: openRouterMessages,
+            stream: true,
             temperature: 0.5,
-          });
+          })
+        });
 
-          setIsThinking(false);
-          for await (const chunk of responseStream) {
-            const chunkText = chunk.data.choices[0].delta.content;
-            if (typeof chunkText === 'string') {
-              fullText += chunkText;
-              setMessages(prev => prev.map(msg =>
-                msg.id === aiMessageId ? { ...msg, content: fullText } : msg
-              ));
+        if (!response.ok) {
+           const errData = await response.json().catch(() => ({}));
+           throw new Error(errData?.error?.message || `OpenRouter error: ${response.status}`);
+        }
+
+        setIsThinking(false);
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder("utf-8");
+        
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+            
+            for (const line of lines) {
+              const dataText = line.replace('data: ', '').trim();
+              if (dataText === '[DONE]') break;
+              
+              try {
+                const data = JSON.parse(dataText);
+                const delta = data.choices[0]?.delta?.content;
+                if (delta) {
+                  fullText += delta;
+                  setMessages(prev => prev.map(msg =>
+                    msg.id === aiMessageId ? { ...msg, content: fullText } : msg
+                  ));
+                }
+              } catch (e) {
+                // Ignore partial JSON parse errors
+              }
             }
           }
-        } else if (currentModel.type === 'groq') {
-           let contextPrompt = userInput || "Analyze the following content.";
-           
-           // Append extracted text or file descriptions for Groq (which is text-only usually)
-           if (currentFiles.length > 0) {
-              contextPrompt += "\n\n[ATTACHED FILES CONTENT]";
-              currentFiles.forEach(file => {
-                 if (file.extractedText) {
-                    contextPrompt += `\n--- File: ${file.name} ---\n${file.extractedText}\n`;
-                 } else {
-                    contextPrompt += `\n--- File: ${file.name} (Binary/Image) ---\n[This is an image or binary file named ${file.name}. Please describe your general knowledge of this file type if applicable.]\n`;
-                 }
-              });
-           }
-
-           const groqMessages: any[] = [
-             { role: 'system', content: dynamicSystemInstruction },
-             ...messages.map(m => {
-                let content = m.content;
-                if (m.type === 'file' && m.files) {
-                   const fileList = m.files.map(f => f.name).join(', ');
-                   content = `[Attached Files: ${fileList}]\n${m.content}`;
-                }
-                return {
-                   role: m.role === 'user' ? 'user' : 'assistant',
-                   content: content
-                };
-             }),
-             { role: 'user', content: contextPrompt }
-           ];
-           
-           const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                 'Authorization': `Bearer ${getGroqKey()}`,
-                 'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                 model: currentModel.id,
-                 messages: groqMessages,
-                 temperature: 0.5,
-                 stream: true
-              })
-           });
-
-           if (!response.ok) {
-              throw new Error(`Groq error: ${response.status} ${response.statusText}`);
-           }
-
-           // Handle SSE streaming for Groq
-           setIsThinking(false);
-           const reader = response.body?.getReader();
-           const decoder = new TextDecoder("utf-8");
-           if (reader) {
-              while (true) {
-                 const { done, value } = await reader.read();
-                 if (done) break;
-                 const chunk = decoder.decode(value);
-                 const lines = chunk.split('\n').filter(line => line.trim() !== '' && line.trim() !== 'data: [DONE]');
-                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                       try {
-                          const data = JSON.parse(line.substring(6));
-                          const delta = data.choices[0].delta.content;
-                          if (delta) {
-                             fullText += delta;
-                             setMessages(prev => prev.map(msg =>
-                                msg.id === aiMessageId ? { ...msg, content: fullText } : msg
-                             ));
-                          }
-                       } catch (e) {}
-                    }
-                 }
-              }
-           }
         }
 
         if (isDocGen) {
            await handleDocumentGeneration(docType, docTopic, fullText);
-           // Rewrite aiMessage content to replace raw document string
            setMessages(prev => prev.map(msg =>
               msg.id === aiMessageId ? { ...msg, content: `✅ I've created the ${docType.toUpperCase()} file about "${docTopic}". It should download automatically!`, isStreaming: false } : msg
            ));
@@ -682,28 +634,22 @@ export default function App() {
       } catch (error: any) {
         console.error(`Error with model ${currentModel.id}:`, error);
 
-        const isQuotaError = error?.message?.includes('quota') || error?.message?.includes('429') || error?.status === 'RESOURCE_EXHAUSTED' || error?.status === 429;
-
-        // Robust fallback: Try the next model for ANY error before giving up
         if (modelIndex < FALLBACK_MODELS.length - 1) {
           modelIndex++;
-          console.log(`Fallback: Switching to next model ${FALLBACK_MODELS[modelIndex].id} due to error in ${currentModel.id}`);
+          console.log(`Fallback: Switching to next model ${FALLBACK_MODELS[modelIndex].id}`);
           continue;
         }
 
         setIsThinking(false);
         let errorMsg = 'I encountered an error. This might be due to file size, type, or API quota. Please try again.';
-
-        if (isQuotaError) {
-          errorMsg = '⚠️ **Quota Exceeded (Error 429)**: All available AI models have reached their usage limits. \n\n**How to fix:**\n1. If you just updated the key on Netlify, you **MUST** go to Deploys > Trigger Deploy > **Clear cache and deploy site**.\n2. Check your [Google AI Studio Plan](https://aistudio.google.com/app/plan_and_billing) or Mistral account.';
-        } else if (error?.message?.includes('API key') || error?.message?.includes('403')) {
-          errorMsg = 'There is an issue with the API key configuration. Please check your environment variables.';
+        if (error?.message?.includes('quota') || error?.message?.includes('429')) {
+          errorMsg = '⚠️ **Quota Exceeded (Error 429)**: All available AI models have reached their usage limits on OpenRouter.';
         }
 
         setMessages(prev => prev.map(msg =>
           msg.id === aiMessageId ? { ...msg, content: errorMsg, isStreaming: false } : msg
         ));
-        success = true; // Stop loop
+        success = true;
       }
     }
     setIsLoading(false);
