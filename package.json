@@ -31,8 +31,9 @@
     "xlsx": "^0.18.5"
   },
   "overrides": {
-    "qs": ">=6.15.2",
-    "ws": ">=8.20.1"
+    "qs": "^6.15.2",
+    "protobufjs": "^7.5.5",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
